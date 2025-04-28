@@ -30,15 +30,32 @@ jest.mock('axios', () => {
 
 jest.mock('fs-extra');
 jest.mock('xlsx', () => ({
-  readFile: jest.fn().mockReturnValue({
+readFile: jest.fn().mockReturnValue({
     SheetNames: ['Sheet1', 'Test Sheet'],
     Sheets: {
-      'Sheet1': { mock: 'sheet1' },
-      'Test Sheet': { mock: 'sheet2' }
+      'Sheet1': { mock: 'sheet1', '!ref': 'A1:C10' },
+      'Test Sheet': { mock: 'sheet2', '!ref': 'A1:C10' }
     }
   }),
   utils: {
-    sheet_to_csv: jest.fn().mockReturnValue('header1,header2\nvalue1,value2')
+    sheet_to_csv: jest.fn().mockReturnValue('header1,header2\nvalue1,value2'),
+    sheet_to_json: jest.fn().mockReturnValue([
+      ['header1', 'header2'],
+      ['value1', 'value2']
+    ]),
+    // Add missing utility functions used in our modifications
+    encode_col: jest.fn().mockImplementation(col => {
+      // Simple implementation for tests: convert 0 to A, 1 to B, etc.
+      return String.fromCharCode(65 + col);
+    }),
+    decode_col: jest.fn().mockImplementation(col => {
+      // Simple implementation: convert A to 0, B to 1, etc.
+      return col.charCodeAt(0) - 65;
+    }),
+    decode_range: jest.fn().mockImplementation(range => {
+      // Mock returning a standard range
+      return { s: { c: 0, r: 0 }, e: { c: 2, r: 10 } };
+    })
   }
 }));
 
@@ -637,18 +654,27 @@ describe('Helper Functions', () => {
       };
       (XLSX.readFile as jest.Mock).mockReturnValue(mockWorkbook);
       
-      // Mock XLSX.utils.sheet_to_csv
-      const mockCsv = 'header1,header2\nvalue1,value2';
-      (XLSX.utils.sheet_to_csv as jest.Mock).mockReturnValue(mockCsv);
+      // Mock XLSX.utils.sheet_to_json
+      const mockData = [
+        ['header1', 'header2'],
+        ['value1', 'value2']
+      ];
+      (XLSX.utils.sheet_to_json as jest.Mock).mockReturnValue(mockData);
       
+      const expectedCsv = 'header1,header2\nvalue1,value2\n';
       const result = convertXLSXToCSV(xlsxPath, mockSheetName);
       
       expect(XLSX.readFile).toHaveBeenCalledWith(xlsxPath);
-      expect(XLSX.utils.sheet_to_csv).toHaveBeenCalledWith(
+      // Check that sheet_to_json was called with the right sheet
+      expect(XLSX.utils.sheet_to_json).toHaveBeenCalledWith(
         mockWorkbook.Sheets[mockSheetName],
-        { FS: ',', RS: '\n', blankrows: false }
+        expect.objectContaining({ 
+          header: 1, 
+          raw: false,
+          defval: '' // Our implementation now includes defval parameter
+        })
       );
-      expect(result).toBe(mockCsv);
+      expect(result).toBe(expectedCsv);
     });
     
     it('should use case-insensitive matching for sheet names', () => {
@@ -661,17 +687,25 @@ describe('Helper Functions', () => {
       };
       (XLSX.readFile as jest.Mock).mockReturnValue(mockWorkbook);
       
-      // Mock XLSX.utils.sheet_to_csv
-      const mockCsv = 'header1,header2\nvalue1,value2';
-      (XLSX.utils.sheet_to_csv as jest.Mock).mockReturnValue(mockCsv);
+      // Mock XLSX.utils.sheet_to_json
+      const mockData = [
+        ['header1', 'header2'],
+        ['value1', 'value2']
+      ];
+      (XLSX.utils.sheet_to_json as jest.Mock).mockReturnValue(mockData);
       
+      const expectedCsv = 'header1,header2\nvalue1,value2\n';
       const result = convertXLSXToCSV(xlsxPath, mockSheetName);
       
-      expect(XLSX.utils.sheet_to_csv).toHaveBeenCalledWith(
+      expect(XLSX.utils.sheet_to_json).toHaveBeenCalledWith(
         mockWorkbook.Sheets['TEST SHEET'],
-        expect.any(Object)
+        expect.objectContaining({ 
+          header: 1, 
+          raw: false,
+          defval: '' // Our implementation now includes defval parameter
+        })
       );
-      expect(result).toBe(mockCsv);
+      expect(result).toBe(expectedCsv);
     });
     
     it('should use the first sheet if no sheet name is provided', () => {
@@ -684,17 +718,25 @@ describe('Helper Functions', () => {
       };
       (XLSX.readFile as jest.Mock).mockReturnValue(mockWorkbook);
       
-      // Mock XLSX.utils.sheet_to_csv
-      const mockCsv = 'header1,header2\nvalue1,value2';
-      (XLSX.utils.sheet_to_csv as jest.Mock).mockReturnValue(mockCsv);
+      // Mock XLSX.utils.sheet_to_json
+      const mockData = [
+        ['header1', 'header2'],
+        ['value1', 'value2']
+      ];
+      (XLSX.utils.sheet_to_json as jest.Mock).mockReturnValue(mockData);
       
+      const expectedCsv = 'header1,header2\nvalue1,value2\n';
       const result = convertXLSXToCSV(xlsxPath);
       
-      expect(XLSX.utils.sheet_to_csv).toHaveBeenCalledWith(
+      expect(XLSX.utils.sheet_to_json).toHaveBeenCalledWith(
         mockWorkbook.Sheets['Sheet1'],
-        expect.any(Object)
+        expect.objectContaining({ 
+          header: 1, 
+          raw: false,
+          defval: '' // Our implementation now includes defval parameter
+        })
       );
-      expect(result).toBe(mockCsv);
+      expect(result).toBe(expectedCsv);
     });
     
     it('should throw an error if the specified sheet is not found', () => {
@@ -711,6 +753,43 @@ describe('Helper Functions', () => {
       expect(() => convertXLSXToCSV(xlsxPath, 'Non-existent Sheet')).toThrow(
         "Sheet 'Non-existent Sheet' not found. Available sheets: Sheet1, Sheet2"
       );
+    });
+    
+    it('should properly handle multi-line cell data', () => {
+      // Mock XLSX.readFile
+      const mockWorkbook = {
+        SheetNames: ['Sheet1'],
+        Sheets: {
+          'Sheet1': { mock: 'sheet' }
+        }
+      };
+      (XLSX.readFile as jest.Mock).mockReturnValue(mockWorkbook);
+      
+      // Mock sheet_to_json to return data with multi-line content
+      const mockData = [
+        ['Header1', 'Header2'],
+        ['Normal value', 'Line 1\nLine 2\nLine 3'],
+        ['Another value', 'Value with "quotes" and,commas']
+      ];
+      (XLSX.utils.sheet_to_json as jest.Mock).mockReturnValue(mockData);
+      
+      const expectedCSV = 
+        'Header1,Header2\n' +
+        'Normal value,"Line 1\nLine 2\nLine 3"\n' +
+        'Another value,"Value with ""quotes"" and,commas"\n';
+      
+      const result = convertXLSXToCSV(xlsxPath);
+      
+      expect(XLSX.readFile).toHaveBeenCalledWith(xlsxPath);
+      expect(XLSX.utils.sheet_to_json).toHaveBeenCalledWith(
+        mockWorkbook.Sheets['Sheet1'],
+        expect.objectContaining({ 
+          header: 1, 
+          raw: false,
+          defval: '' // Our implementation now includes defval parameter
+        })
+      );
+      expect(result).toBe(expectedCSV);
     });
   });
 });

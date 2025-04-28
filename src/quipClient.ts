@@ -271,7 +271,61 @@ export function convertXLSXToCSV(xlsxPath: string, sheetName?: string): string {
   // Get the sheet
   const sheet = workbook.Sheets[sheetNames[sheetIndex]];
   
-  // Convert to CSV
-  const csvOptions = { FS: ',', RS: '\n', blankrows: false };
-  return XLSX.utils.sheet_to_csv(sheet, csvOptions);
+  // BUGFIX: Manually scan for all cell keys to determine the true sheet range
+  // This fixes an issue where the sheet's !ref property might incorrectly report
+  // a smaller range than the actual data in the file
+  const cellKeys = Object.keys(sheet).filter(key => key[0] !== '!');
+  let maxCol = 0;
+  let maxRow = 0;
+  
+  // Find the maximum column and row by examining all cell keys
+  cellKeys.forEach(key => {
+    // Parse cell address (e.g., "A1", "B2", etc.)
+    const match = key.match(/^([A-Z]+)(\d+)$/);
+    if (match) {
+      const colStr = match[1];
+      const rowIdx = parseInt(match[2], 10);
+      
+      const colIdx = XLSX.utils.decode_col(colStr);
+      if (colIdx > maxCol) maxCol = colIdx;
+      if (rowIdx > maxRow) maxRow = rowIdx;
+    }
+  });
+  
+  // Create a custom range that includes all cells
+  const customRange = {
+    s: { c: 0, r: 0 },           // Start at A1
+    e: { c: maxCol, r: maxRow-1 } // End at the furthest cell
+  };
+  
+  // Log the detected range
+  logger.info(`Detected full sheet range: from A1 to ${XLSX.utils.encode_col(maxCol)}${maxRow}`);
+  logger.info(`Total columns: ${maxCol + 1}`);
+  
+  // Convert to JSON using our custom range to include all columns
+  const data = XLSX.utils.sheet_to_json(sheet, { 
+    header: 1, 
+    raw: false,
+    defval: '', // Ensure empty cells are included
+    range: customRange // Use our custom range instead of sheet['!ref']
+  }) as any[][];
+  
+  // Process data and build CSV with proper escaping
+  let csvContent = '';
+  for (const row of data) {
+    if (!row || row.length === 0) continue; // Skip empty rows
+    
+    csvContent += row.map((cell: any) => {
+      // Handle null or undefined cells
+      const cellValue = cell === null || cell === undefined ? '' : String(cell);
+      
+      // If cell contains commas, quotes, or newlines, wrap in quotes and escape any quotes
+      if (cellValue.includes(',') || cellValue.includes('"') || cellValue.includes('\n') || cellValue.includes('\r')) {
+        return `"${cellValue.replace(/"/g, '""')}"`;
+      }
+      return cellValue;
+    }).join(',') + '\n';
+  }
+  
+  return csvContent;
 }

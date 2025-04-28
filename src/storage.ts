@@ -232,7 +232,7 @@ export class LocalStorage implements StorageInterface {
 }
 
 /**
- * Truncate CSV content to be under the specified maximum size
+ * Truncate CSV content to be under the specified maximum size while maintaining valid CSV structure
  * 
  * @param csvContent Original CSV content
  * @param maxSize Maximum size in bytes (default: 10KB)
@@ -240,29 +240,77 @@ export class LocalStorage implements StorageInterface {
  */
 export function truncateCSVContent(csvContent: string, maxSize: number = 10 * 1024): [string, boolean] {
   if (csvContent.length <= maxSize) {
-    return [csvContent, false];
+    return [csvContent, false]; // No truncation needed
   }
   
-  const lines = csvContent.split('\n');
-  const header = lines[0] || '';
+  // Parse the CSV properly to handle quoted fields with embedded newlines
+  // First, identify the header row
+  let headerEndIndex = 0;
+  let inQuote = false;
   
-  // Always include the header
-  const result = [header];
-  let currentSize = header.length + 1; // +1 for newline
-  
-  // Add as many data rows as possible without exceeding maxSize
-  for (let i = 1; i < lines.length; i++) {
-    const lineSize = lines[i].length + 1; // +1 for newline
-    if (currentSize + lineSize > maxSize) {
+  // Find where the header row ends by tracking quotes
+  for (let i = 0; i < csvContent.length; i++) {
+    if (csvContent[i] === '"') {
+      // Toggle quote state (accounting for escaped quotes)
+      if (i + 1 < csvContent.length && csvContent[i + 1] === '"') {
+        i++; // Skip escaped quote
+      } else {
+        inQuote = !inQuote;
+      }
+    } else if (csvContent[i] === '\n' && !inQuote) {
+      headerEndIndex = i;
       break;
     }
-    
-    result.push(lines[i]);
-    currentSize += lineSize;
   }
   
-  const truncatedContent = result.join('\n');
+  // Get header row
+  const header = csvContent.substring(0, headerEndIndex);
+  
+  // Now parse the CSV to find complete rows
+  let currentPos = headerEndIndex + 1; // Start after header
+  const completedRows = [header]; // Start with header
+  let rowStartPos = currentPos;
+  let currentSize = header.length + 1; // +1 for newline
+  inQuote = false;
+  
+  while (currentPos < csvContent.length) {
+    const char = csvContent[currentPos];
+    
+    // Handle quotes to properly track multi-line cells
+    if (char === '"') {
+      // Check for escaped quotes (two double quotes in a row)
+      if (currentPos + 1 < csvContent.length && csvContent[currentPos + 1] === '"') {
+        currentPos += 2; // Skip both quote characters
+      } else {
+        inQuote = !inQuote;
+        currentPos++;
+      }
+      continue;
+    }
+    
+    // If we find a row end (newline outside of quotes)
+    if (char === '\n' && !inQuote) {
+      const row = csvContent.substring(rowStartPos, currentPos);
+      const rowSize = row.length + 1; // +1 for newline
+      
+      // Check if adding this row would exceed our size limit
+      if (currentSize + rowSize > maxSize) {
+        break; // Stop if adding this row would exceed maxSize
+      }
+      
+      // Add the complete row
+      completedRows.push(row);
+      currentSize += rowSize;
+      rowStartPos = currentPos + 1; // Start of next row
+    }
+    
+    currentPos++;
+  }
+  
+  const truncatedContent = completedRows.join('\n');
   logger.info(`Truncated CSV from ${csvContent.length} bytes to ${truncatedContent.length} bytes`);
+  logger.info(`Truncated from ${csvContent.split('\n').length} lines to ${truncatedContent.split('\n').length} lines`);
+  
   return [truncatedContent, true];
 }
 
