@@ -56,8 +56,10 @@ async function main() {
     const env = { ...process.env };
     delete env.PORT; // Explicitly remove PORT to prevent HTTP transport
     
-    // Add more debugging to the transport
-    const args = [serverPath, "--debug", "--file-protocol"]; // Use debug mode and file protocol
+    // Add debug flag for server and JSON format to redirect logs 
+    const args = [serverPath, "--debug", "--file-protocol", "--json", "--log-file", "./server.log"]; // Use debug mode, file protocol, and JSON output
+    
+    // Configure transport with stderr piped to capture logs
     const transport = new StdioClientTransport({
       command: 'node',
       args,
@@ -66,7 +68,8 @@ async function main() {
         QUIP_TOKEN: quipToken,
         QUIP_BASE_URL: quipBaseUrl,
         NODE_OPTIONS: "--inspect" // Enable Node.js inspector for debugging
-      }
+      },
+      stderr: 'pipe' // Pipe stderr so we can capture server logs
     });
     
     // Add event listeners for process events
@@ -96,6 +99,16 @@ async function main() {
       console.log("Attempting to connect to the server...");
       await client.connect(transport, { timeout: 10000 }); // 10 second timeout
       console.log("Connected to Quip MCP server");
+      
+      // Access stderr after connection is established
+      if (transport.stderr) {
+        console.log("Server stderr stream available, setting up log capture...");
+        transport.stderr.on('data', (chunk: Buffer) => {
+          console.log(`[SERVER LOG] ${chunk.toString().trim()}`);
+        });
+      } else {
+        console.log("Server stderr stream not available");
+      }
     } catch (error) {
       console.error("Failed to connect to the server:", error);
       process.exit(1);

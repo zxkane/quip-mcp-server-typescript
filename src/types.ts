@@ -32,6 +32,11 @@ export interface CommandLineOptions {
   json: boolean;
   
   /**
+   * Path to log file (enables file logging when specified)
+   */
+  logFile?: string;
+  
+  /**
    * Whether to enable authentication
    */
   auth: boolean;

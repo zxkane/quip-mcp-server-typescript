@@ -4,9 +4,9 @@
 import axios from 'axios';
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import * as os from 'os';
 import * as XLSX from 'xlsx';
 import * as cheerio from 'cheerio';
+import { logger } from './logger';
 
 /**
  * Simple Quip API client implementation for the MCP server
@@ -27,12 +27,12 @@ export class QuipClient {
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.axiosInstance = axios.create({
       headers: {
-        'Authorization': `Bearer ${accessToken}`
+        'Authorization': `Bearer ${this.accessToken}`
       },
       // Add timeout configuration to prevent hanging requests
       timeout: 30000 // 30 seconds timeout
     });
-    console.info(`QuipClient initialized with base URL: ${this.baseUrl}`);
+    logger.info(`QuipClient initialized with base URL: ${this.baseUrl}`);
   }
   
   /**
@@ -43,12 +43,12 @@ export class QuipClient {
    * @throws Error if the request fails
    */
   async getThread(threadId: string): Promise<Record<string, any>> {
-    console.info(`Getting thread: ${threadId}`);
+    logger.info(`Getting thread: ${threadId}`);
     try {
       const response = await this.axiosInstance.get(`${this.baseUrl}/1/threads/${threadId}`);
       return response.data;
     } catch (error) {
-      console.error(`Error getting thread ${threadId}: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`Error getting thread ${threadId}: ${error instanceof Error ? error.message : String(error)}`);
       // Check for timeout error based on error message or properties
       const err = error as any;
       if (err.code === 'ECONNABORTED' || (err.message && err.message.includes('timeout'))) {
@@ -67,7 +67,7 @@ export class QuipClient {
    * @throws Error if the request fails
    */
   async exportThreadToXLSX(threadId: string, outputPath: string): Promise<string> {
-    console.info(`Exporting thread ${threadId} to XLSX`);
+    logger.info(`Exporting thread ${threadId} to XLSX`);
     try {
       const response = await this.axiosInstance.get(
         `${this.baseUrl}/1/threads/${threadId}/export/xlsx`,
@@ -83,10 +83,10 @@ export class QuipClient {
       // Write the file
       await fs.writeFile(outputPath, Buffer.from(response.data));
       
-      console.info(`Successfully exported XLSX to ${outputPath}`);
+      logger.info(`Successfully exported XLSX to ${outputPath}`);
       return outputPath;
     } catch (error) {
-      console.error(`Error exporting thread ${threadId} to XLSX: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`Error exporting thread ${threadId} to XLSX: ${error instanceof Error ? error.message : String(error)}`);
       // Check for timeout error based on error message or properties
       const err = error as any;
       if (err.code === 'ECONNABORTED' || (err.message && err.message.includes('timeout'))) {
@@ -105,7 +105,7 @@ export class QuipClient {
    * @throws Error if the thread is not found or does not contain a spreadsheet
    */
   async exportThreadToCSVFallback(threadId: string, sheetName?: string): Promise<string> {
-    console.info(`Using fallback method to export thread ${threadId} to CSV`);
+    logger.info(`Using fallback method to export thread ${threadId} to CSV`);
     
     // Get thread data
     const thread = await this.getThread(threadId);
@@ -161,7 +161,7 @@ export class QuipClient {
       const threadType = thread.thread.type?.toLowerCase() || '';
       return threadType === 'spreadsheet';
     } catch (error) {
-      console.error(`Error checking if thread is spreadsheet: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`Error checking if thread is spreadsheet: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
   }
@@ -242,14 +242,14 @@ export function extractSheetData(sheet: any): string[][] {
  * @throws Error if the sheet is not found
  */
 export function convertXLSXToCSV(xlsxPath: string, sheetName?: string): string {
-  console.info(`Reading XLSX file from ${xlsxPath}`);
+  logger.info(`Reading XLSX file from ${xlsxPath}`);
   
   // Load the workbook
   const workbook = XLSX.readFile(xlsxPath);
   
   // Get available sheet names
   const sheetNames = workbook.SheetNames;
-  console.info(`Available sheets: ${sheetNames.join(', ')}`);
+  logger.info(`Available sheets: ${sheetNames.join(', ')}`);
   
   // Determine which sheet to use
   let sheetIndex = 0;

@@ -6,6 +6,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { version } from './version';
 import { CommandLineOptions } from './types';
+import { logger } from './logger';
 
 /**
  * Parse command line arguments
@@ -42,6 +43,10 @@ export function parseCommandLineArgs(): CommandLineOptions {
       '--json',
       'Output logs as JSON',
       false
+    )
+    .option(
+      '--log-file <path>',
+      'Path to log file (enables file logging)'
     )
     .option(
       '--auth',
@@ -87,7 +92,7 @@ export function getStoragePath(options: { storagePath?: string }): string {
   
   // Default to ~/.quip-mcp-server/storage
   const defaultPath = path.join(os.homedir(), '.quip-mcp-server', 'storage');
-  console.info(`Using default storage path: ${defaultPath}`);
+  logger.info(`Using default storage path: ${defaultPath}`);
   return defaultPath;
 }
 
@@ -96,13 +101,14 @@ export function getStoragePath(options: { storagePath?: string }): string {
  * 
  * @param options Command line options
  */
-export function configureLogging(options: { debug: boolean, json?: boolean }): void {
+export function configureLogging(options: { debug: boolean, json?: boolean, logFile?: string }): void {
   // Import the logger here to avoid circular dependencies
   const { configureLogger, LogLevel } = require('./logger');
   
   // Configure the logger
   configureLogger({
     debug: options.debug,
-    json: options.json || false
+    json: options.json || false,
+    logFile: options.logFile
   });
 }

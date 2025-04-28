@@ -3,6 +3,8 @@
  * Using Winston logging library
  */
 import winston from 'winston';
+import * as path from 'path';
+import * as fs from 'fs';
 
 /**
  * Log levels
@@ -48,6 +50,21 @@ export interface LoggerConfig {
    * Whether to output logs as JSON
    */
   json: boolean;
+
+  /**
+   * Path to log file (enables file logging when specified)
+   */
+  logFile?: string;
+  
+  /**
+   * Maximum size of log file before rotation (default: 10MB)
+   */
+  maxFileSize?: number;
+  
+  /**
+   * Maximum number of log files to keep (default: 5)
+   */
+  maxFiles?: number;
 }
 
 /**
@@ -75,6 +92,9 @@ export class Logger {
     const level = config.level ?? LogLevel.INFO;
     const shouldUseTimestamps = config.timestamps ?? true;
     const shouldUseJSON = config.json ?? false;
+    const logFile = config.logFile;
+    const maxFileSize = config.maxFileSize ?? 10 * 1024 * 1024; // 10MB default
+    const maxFiles = config.maxFiles ?? 5;
     
     // Create format based on configuration
     let format: winston.Logform.Format;
@@ -108,13 +128,34 @@ export class Logger {
       );
     }
     
+    // Create transports array
+    const transports: winston.transport[] = [
+      new winston.transports.Console()
+    ];
+    
+    // Add file transport if logFile is specified
+    if (logFile) {
+      // Ensure directory exists
+      const logDir = path.dirname(logFile);
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      
+      transports.push(
+        new winston.transports.File({
+          filename: logFile,
+          maxsize: maxFileSize,
+          maxFiles: maxFiles,
+          tailable: true
+        })
+      );
+    }
+    
     // Create winston logger
     this.logger = winston.createLogger({
       level: levelMap[level],
       format: format,
-      transports: [
-        new winston.transports.Console()
-      ]
+      transports: transports
     });
     
     this.context = context;
@@ -248,6 +289,82 @@ export class Logger {
       }
     };
   }
+  
+  /**
+   * Reconfigure an existing logger with new settings
+   * 
+   * @param config Logger configuration
+   */
+  reconfigure(config: Partial<LoggerConfig> = {}): void {
+    const level = config.level ?? LogLevel.INFO;
+    const shouldUseTimestamps = config.timestamps ?? true;
+    const shouldUseJSON = config.json ?? false;
+    const logFile = config.logFile;
+    const maxFileSize = config.maxFileSize ?? 10 * 1024 * 1024; // 10MB default
+    const maxFiles = config.maxFiles ?? 5;
+    
+    // Create format based on configuration
+    let format: winston.Logform.Format;
+    
+    if (shouldUseJSON) {
+      format = winston.format.combine(
+        shouldUseTimestamps ? winston.format.timestamp() : winston.format.simple(),
+        winston.format.json()
+      );
+    } else {
+      const customFormat = winston.format.printf(({ level, message, timestamp, ...rest }) => {
+        const prefix = shouldUseTimestamps && timestamp ? `[${timestamp}] ${level.toUpperCase()}: ` : `${level.toUpperCase()}: `;
+        let output = `${prefix}${message}`;
+        
+        // Add any additional data as JSON
+        const additionalData = { ...rest };
+        delete additionalData.level;
+        delete additionalData.message;
+        delete additionalData.timestamp;
+        
+        if (Object.keys(additionalData).length > 0) {
+          output += ` ${JSON.stringify(additionalData)}`;
+        }
+        
+        return output;
+      });
+      
+      format = winston.format.combine(
+        shouldUseTimestamps ? winston.format.timestamp() : winston.format.simple(),
+        customFormat
+      );
+    }
+    
+    // Create transports array
+    const transports: winston.transport[] = [
+      new winston.transports.Console()
+    ];
+    
+    // Add file transport if logFile is specified
+    if (logFile) {
+      // Ensure directory exists
+      const logDir = path.dirname(logFile);
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      
+      transports.push(
+        new winston.transports.File({
+          filename: logFile,
+          maxsize: maxFileSize,
+          maxFiles: maxFiles,
+          tailable: true
+        })
+      );
+    }
+    
+    // Update winston logger configuration
+    this.logger.configure({
+      level: levelMap[level],
+      format: format,
+      transports: transports
+    });
+  }
 }
 
 // Create default logger instance
@@ -259,17 +376,19 @@ export const logger = new Logger();
  * @param options Command line options
  * @returns Configured logger instance
  */
-export function configureLogger(options: { debug?: boolean, json?: boolean } = {}): Logger {
+export function configureLogger(options: { debug?: boolean, json?: boolean, logFile?: string } = {}): Logger {
   const config: Partial<LoggerConfig> = {
     level: options.debug ? LogLevel.DEBUG : LogLevel.INFO,
     json: options.json || false,
-    timestamps: true
+    timestamps: true,
+    logFile: options.logFile
   };
   
-  const newLogger = new Logger(config);
+  // Update the existing logger instead of creating a new one
+  logger.reconfigure(config);
   
   // Install as global logger
-  newLogger.installAsGlobal();
+  logger.installAsGlobal();
   
-  return newLogger;
+  return logger;
 }

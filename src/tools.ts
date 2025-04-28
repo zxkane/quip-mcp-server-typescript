@@ -168,7 +168,10 @@ export async function handleQuipReadSpreadsheet(
   }
 
   // Save the full CSV content to storage
-  await storage.saveCSV(threadId, csvData, sheetName);
+  const storageId = await storage.saveCSV(threadId, csvData, sheetName);
+  logger.info(`Saved spreadsheet data to storage with ID: ${storageId}`, {
+    sheet: sheetName || 'default'
+  });
   
   // Get metadata
   const metadata = await storage.getMetadata(threadId, sheetName);
