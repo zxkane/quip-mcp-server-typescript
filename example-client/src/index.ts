@@ -220,16 +220,24 @@ async function main() {
               );
               console.log('Received read_resource response');
               
-              if (resourceResult && resourceResult.content && Array.isArray(resourceResult.content) && resourceResult.content.length > 0) {
-                const resourceContent = resourceResult.content[0];
+              // Debug the response structure
+              console.log('Resource result:', JSON.stringify(resourceResult, null, 2));
+              
+              if (resourceResult && resourceResult.contents && Array.isArray(resourceResult.contents) && resourceResult.contents.length > 0) {
+                const resourceContent = resourceResult.contents[0];
+                console.log('Resource content:', JSON.stringify(resourceContent, null, 2));
                 
-                if (resourceContent.type === "text" && resourceContent.text) {
+                if (resourceContent.type === "text" && typeof resourceContent.text === 'string') {
                   console.log(`Complete CSV has ${resourceContent.text.split('\n').length} lines`);
                 } else {
                   console.log('Could not retrieve complete CSV content');
+                  console.log('Content type:', resourceContent.type);
+                  console.log('Text type:', typeof resourceContent.text);
+                  console.log('Text value:', resourceContent.text);
                 }
               } else {
                 console.log('No content returned from resource');
+                console.log('Response:', JSON.stringify(resourceResult, null, 2));
               }
             } catch (resourceError) {
               console.error('Error reading resource:', resourceError);

@@ -191,8 +191,12 @@ async function accessResource(uri: string): Promise<(TextContent | ImageContent 
     throw new ResourceNotFoundError(uri);
   }
   
-  // Return the full CSV content
-  return [{ type: "text", text: csvContent }];
+  // Return the full CSV content with URI as required by MCP schema
+  return [{ 
+    type: "text", 
+    text: csvContent,
+    uri: uri  // Add the URI field to match the expected schema
+  }];
 }
 
 /**
@@ -283,7 +287,7 @@ export async function main(): Promise<void> {
     server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       logger.info(`Handling resources/read request for URI: ${request.params.uri}`);
       return {
-        content: await accessResource(request.params.uri)
+        contents: await accessResource(request.params.uri)
       };
     });
     
