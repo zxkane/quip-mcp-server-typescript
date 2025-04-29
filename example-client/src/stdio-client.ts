@@ -38,7 +38,7 @@ export async function runStdioClient(
     delete env.PORT; // Explicitly remove PORT to prevent HTTP transport
     
     // Add debug flag for server and JSON format to redirect logs 
-    const args = [serverPath, "--debug", "--file-protocol", "--json", "--log-file", "./server.log"];
+    const args = [serverPath, "--file-protocol", "--json", "--log-file", "./server.log"];
     
     // Configure transport with stderr piped to capture logs
     const transport = new StdioClientTransport({
@@ -58,7 +58,7 @@ export async function runStdioClient(
       args: args,
       env: {
         QUIP_TOKEN: quipToken ? "***" : undefined,
-        QUIP_BASE_URL: quipBaseUrl,
+        QUIP_BASE_URL: quipBaseUrl ?  "***" : 'default',
         PORT: env.PORT || 'undefined (explicitly removed)',
         NODE_OPTIONS: "--inspect"
       }
