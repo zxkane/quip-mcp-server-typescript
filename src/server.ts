@@ -10,6 +10,8 @@ import { URL } from 'url';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import express from 'express';
+import { Request, Response } from 'express';
 import {
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
@@ -346,7 +348,6 @@ export async function main(): Promise<void> {
     });
     
     // Choose transport based on options
-    let transport;
     
     // Check if we're being launched by the client (stdin is a pipe)
     const isStdinPipe = !process.stdin.isTTY;
@@ -356,38 +357,105 @@ export async function main(): Promise<void> {
     
     // Choose transport based on options
     if (options.port || process.env.PORT) {
+      // Using Streamable HTTP transport with Express
       const port = options.port || parseInt(process.env.PORT || '3000', 10);
       logger.info(`Using HTTP transport on port ${port}`);
-      transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => Math.random().toString(36).substring(2, 15),
-        enableJsonResponse: true
-      });
-    } else {
-      logger.info("Using stdio transport");
-      transport = new StdioServerTransport();
-    }
-    
-    // Connect to the transport
-    logger.info("Connecting to transport");
-    
-    try {
-      // This will block until the server is stopped
-      await server.connect(transport);
-      logger.info("Server connected successfully");
       
-      // Keep the process running until SIGINT
+      // Create Express app
+      const app = express();
+      app.use(express.json());
+      
+      // Handle POST requests for client-to-server communication
+      app.post('/mcp', async (req: Request, res: Response) => {
+        logger.info('Received POST MCP request');
+        
+        try {
+          // Each request gets its own transport and server instance for stateless mode
+          const transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: undefined,  // No sessions in stateless mode
+            enableJsonResponse: true
+          });
+          
+          // Clean up on request close
+          res.on('close', () => {
+            logger.info('Request closed');
+            transport.close();
+          });
+          
+          await server.connect(transport);
+          await transport.handleRequest(req, res, req.body);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.error('Error handling MCP request:', { error: errorMessage });
+          
+          if (!res.headersSent) {
+            res.status(500).json({
+              jsonrpc: '2.0',
+              error: {
+                code: -32603,
+                message: 'Internal server error'
+              },
+              id: null
+            });
+          }
+        }
+      });
+      
+      // Stateless mode doesn't support GET (server-sent events) or DELETE (session termination)
+      app.get('/mcp', async (req: Request, res: Response) => {
+        logger.info('Received GET MCP request');
+        res.status(405).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32000,
+            message: 'Method not allowed in stateless mode.'
+          },
+          id: null
+        });
+      });
+      
+      app.delete('/mcp', async (req: Request, res: Response) => {
+        logger.info('Received DELETE MCP request');
+        res.status(405).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32000,
+            message: 'Method not allowed in stateless mode.'
+          },
+          id: null
+        });
+      });
+      
+      // Start HTTP server
+      const httpServer = app.listen(port, () => {
+        logger.info(`MCP server listening on port ${port}`);
+      });
+      
+      // Keep the process alive
       return new Promise<void>((resolve) => {
         process.on('SIGINT', async () => {
           logger.info('Shutting down server');
+          httpServer.close();
           await server.close();
           resolve();
           process.exit(0);
         });
       });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error connecting to transport: ${errorMessage}`);
-      throw error;
+    } else {
+      // Using stdio transport
+      logger.info("Using stdio transport");
+      const transport = new StdioServerTransport();
+      
+      // Connect to the transport - this will block for stdio
+      logger.info("Connecting to transport");
+      try {
+        await server.connect(transport);
+        logger.info("Server connected successfully");
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(`Error connecting to transport: ${errorMessage}`);
+        throw error;
+      }
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

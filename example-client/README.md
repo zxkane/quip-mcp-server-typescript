@@ -1,6 +1,6 @@
 # Quip MCP Server Example Client
 
-This directory contains an example client for the Quip MCP Server, demonstrating how to interact with the server using the Model Context Protocol (MCP).
+This directory contains example clients for the Quip MCP Server, demonstrating how to interact with the server using the Model Context Protocol (MCP) with different transport mechanisms.
 
 ## Setup
 
@@ -20,55 +20,108 @@ This directory contains an example client for the Quip MCP Server, demonstrating
    - `QUIP_THREAD_ID`: ID of the Quip thread containing the spreadsheet
    - `QUIP_SHEET_NAME`: (Optional) Name of the specific sheet if multiple exist
 
-## Available Client
+4. Build the TypeScript code:
+   ```bash
+   npm run build
+   ```
 
-### TypeScript SDK Client (`src/index.ts`)
+## Available Transport Options
 
-This client demonstrates how to use the official MCP SDK to interact with the Quip MCP server.
+The example client supports two different transport mechanisms for communicating with the Quip MCP server:
 
-**Features:**
+### STDIO Transport (Default)
+
+This transport method spawns a server process and communicates with it directly via standard input/output. This is the simplest way to use the MCP server, as it doesn't require any additional setup.
+
+**Run with STDIO transport:**
+```bash
+npm start
+# or explicitly:
+npm run start:stdio
+```
+
+### HTTP Transport
+
+This transport method connects to the server over HTTP. This requires you to separately start the server in HTTP mode by setting the PORT environment variable.
+
+#### Using the Helper Script (Recommended)
+
+We've provided a helper script to make starting the HTTP server easier:
+
+1. First, start the server in a separate terminal:
+   ```bash
+   # In one terminal, start the server with an HTTP endpoint
+   ./start-http-server.sh 3000
+   ```
+
+2. Then, run the client with HTTP transport:
+   ```bash
+   # In another terminal, run the client with HTTP transport
+   npm run start:http
+   # or specify a custom port:
+   npm run start:http:3000
+   ```
+
+#### Manual Server Start
+
+If you prefer to start the server manually:
+
+1. First, start the server in a separate terminal:
+   ```bash
+   # In one terminal, start the server with an HTTP endpoint
+   QUIP_TOKEN='your_token_here' QUIP_BASE_URL='your_base_url_here' PORT=3000 node dist/index.js --storage-path /data/tmp/mcp/quip-mcp-server --debug
+   ```
+
+2. Then, run the client with HTTP transport:
+   ```bash
+   # In another terminal, run the client with HTTP transport
+   npm run start:http
+   ```
+
+## Features
+
+Both transport options demonstrate the same core functionality:
+
 - Uses TypeScript and MCP SDK
 - Demonstrates complete workflow: connect, list tools, call tool, read resource
 - Handles error cases and provides structured output
 - Parses and displays spreadsheet data
 - Includes robust error handling and debugging features
 
-**Build and run:**
-```bash
-npm run build
-npm start
-```
+## Project Structure
+
+- `src/index.ts` - Main entry point and command-line argument handling
+- `src/client-common.ts` - Shared client logic that works with both transports
+- `src/stdio-client.ts` - STDIO-specific transport implementation
+- `src/http-client.ts` - HTTP-specific transport implementation
 
 ## Using Debug and Mock Mode
 
 The example client is configured to use debug mode by default with the `--debug` and `--file-protocol` flags. The client also supports mock mode which doesn't require a real Quip API token to run.
 
-The available flags include:
+The available server flags include:
 - `--debug`: Enables verbose logging
 - `--file-protocol`: Uses file-based protocol for interaction
 - `--mock`: Runs in mock mode with simulated data
 
-The client includes extensive logging and error handling to help you understand the MCP interaction flow:
-- Connection establishment with timeout handling
-- Tool discovery and listing
-- Spreadsheet data retrieval
-- Resource access for larger datasets
-- Performance timing for operations
-
 ## Troubleshooting
 
-### Timeout Issues
+### STDIO Transport Issues
 
-The client configures a 10-second timeout for connecting to the server. If you encounter timeout errors:
+If you encounter issues with the STDIO transport:
 
-1. Try reducing the complexity of your requests
+1. Check that the server executable path is correct
 2. Ensure your environment variables are correctly set
-3. Check network connectivity to the Quip API
-4. Verify that the server is running properly
+3. Check the server logs (redirected to `server.log`)
 
-### Module Format
+### HTTP Transport Issues
 
-The example client uses ESM modules format, indicated by `"type": "module"` in package.json. The client properly handles ESM imports and paths using Node.js native ESM features.
+If you encounter issues with the HTTP transport:
+
+1. Make sure you have started the server with `PORT=<port> node dist/index.js --debug`
+2. Check that the port numbers match between server and client
+3. Make sure there are no firewall or networking issues blocking the connection
+4. Try increasing the timeout if you have slow connections
 
 ## Server Capabilities
 

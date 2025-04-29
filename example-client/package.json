@@ -7,7 +7,12 @@
   "scripts": {
     "build": "tsc",
     "start": "node build/index.js",
-    "dev": "ts-node --esm src/index.ts"
+    "start:stdio": "node build/index.js",
+    "start:http": "node build/index.js --http",
+    "start:http:3000": "node build/index.js --http --port 3000",
+    "start:http:8080": "node build/index.js --http --port 8080",
+    "dev": "ts-node --esm src/index.ts",
+    "dev:http": "ts-node --esm src/index.ts --http"
   },
   "keywords": [
     "quip",
