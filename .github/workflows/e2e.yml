@@ -51,21 +51,23 @@ jobs:
 
     - name: E2E Test with stdio transport
       working-directory: ./example-client
+      env:
+        NODE_NO_WARNINGS: 1
       run: |
         echo "Running E2E test with stdio transport"
         # Redirect output to files to avoid leaking secrets in logs
-        # Set NODE_NO_WARNINGS=1 to avoid security warnings containing URLs with tokens
-        NODE_NO_WARNINGS=1 node build/index.js > stdio-test-output.txt 2> stdio-test-error.txt || { echo "Stdio transport test failed"; exit 1; }
+        node build/index.js > stdio-test-output.txt 2> stdio-test-error.txt || { echo "Stdio transport test failed"; exit 1; }
         # Check for success markers in output without displaying full content
         grep -q "Connected to Quip MCP server using stdio transport" stdio-test-output.txt || { echo "Failed to connect with stdio transport"; exit 1; }
         grep -q "Test completed successfully" stdio-test-output.txt || { echo "Failed to retrieve spreadsheet data"; exit 1; }
 
     - name: Start server for HTTP transport test
+      env:
+        PORT: 3000
+        QUIP_TOKEN: ${{ secrets.QUIP_TOKEN }}
+        QUIP_BASE_URL: ${{ secrets.QUIP_BASE_URL }}
       run: |
         echo "Starting server for HTTP transport test"
-        export PORT=3000
-        export QUIP_TOKEN=${{ secrets.QUIP_TOKEN }}
-        export QUIP_BASE_URL=${{ secrets.QUIP_BASE_URL }}
         # Create storage directory
         mkdir -p /tmp/mcp/quip-mcp-server
         # Run server in background with minimal logging to avoid leaking secrets
@@ -82,11 +84,12 @@ jobs:
 
     - name: E2E Test with HTTP transport
       working-directory: ./example-client
+      env:
+        NODE_NO_WARNINGS: 1
       run: |
         echo "Running E2E test with HTTP transport"
         # Redirect output to files to avoid leaking secrets in logs
-        # Set NODE_NO_WARNINGS=1 to avoid security warnings containing URLs with tokens
-        NODE_NO_WARNINGS=1 node build/index.js --http --port 3000 > http-test-output.txt 2> http-test-error.txt || { echo "HTTP transport test failed"; exit 1; }
+        node build/index.js --http --port 3000 > http-test-output.txt 2> http-test-error.txt || { echo "HTTP transport test failed"; exit 1; }
         # Check for success markers in output without displaying full content
         grep -q "Connected to Quip MCP server using HTTP transport" http-test-output.txt || { echo "Failed to connect with HTTP transport"; exit 1; }
         grep -q "Test completed successfully" http-test-output.txt || { echo "Failed to retrieve spreadsheet data"; exit 1; }
