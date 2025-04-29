@@ -54,7 +54,8 @@ jobs:
       run: |
         echo "Running E2E test with stdio transport"
         # Redirect output to files to avoid leaking secrets in logs
-        node build/index.js > stdio-test-output.txt 2> stdio-test-error.txt || { echo "Stdio transport test failed"; exit 1; }
+        # Set NODE_NO_WARNINGS=1 to avoid security warnings containing URLs with tokens
+        NODE_NO_WARNINGS=1 node build/index.js > stdio-test-output.txt 2> stdio-test-error.txt || { echo "Stdio transport test failed"; exit 1; }
         # Check for success markers in output without displaying full content
         grep -q "Connected to Quip MCP server using stdio transport" stdio-test-output.txt || { echo "Failed to connect with stdio transport"; exit 1; }
         grep -q "Test completed successfully" stdio-test-output.txt || { echo "Failed to retrieve spreadsheet data"; exit 1; }
@@ -84,7 +85,8 @@ jobs:
       run: |
         echo "Running E2E test with HTTP transport"
         # Redirect output to files to avoid leaking secrets in logs
-        node build/index.js --http --port 3000 > http-test-output.txt 2> http-test-error.txt || { echo "HTTP transport test failed"; exit 1; }
+        # Set NODE_NO_WARNINGS=1 to avoid security warnings containing URLs with tokens
+        NODE_NO_WARNINGS=1 node build/index.js --http --port 3000 > http-test-output.txt 2> http-test-error.txt || { echo "HTTP transport test failed"; exit 1; }
         # Check for success markers in output without displaying full content
         grep -q "Connected to Quip MCP server using HTTP transport" http-test-output.txt || { echo "Failed to connect with HTTP transport"; exit 1; }
         grep -q "Test completed successfully" http-test-output.txt || { echo "Failed to retrieve spreadsheet data"; exit 1; }
@@ -113,7 +115,7 @@ jobs:
         fi
         
     - name: Upload sanitized test logs
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always() # Run this step even if previous steps failed
       with:
         name: e2e-test-logs
