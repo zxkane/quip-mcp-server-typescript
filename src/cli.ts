@@ -103,7 +103,7 @@ export function getStoragePath(options: { storagePath?: string }): string {
  */
 export function configureLogging(options: { debug: boolean, json?: boolean, logFile?: string }): void {
   // Import the logger here to avoid circular dependencies
-  const { configureLogger, LogLevel } = require('./logger');
+  const { configureLogger } = require('./logger');
   
   // Configure the logger
   configureLogger({

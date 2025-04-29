@@ -303,12 +303,12 @@ export function convertXLSXToCSV(xlsxPath: string, sheetName?: string): string {
   logger.info(`Total columns: ${maxCol + 1}`);
   
   // Convert to JSON using our custom range to include all columns
-  const data = XLSX.utils.sheet_to_json(sheet, { 
+  const data: Array<Array<any>> = XLSX.utils.sheet_to_json(sheet, { 
     header: 1, 
     raw: false,
     defval: '', // Ensure empty cells are included
     range: customRange // Use our custom range instead of sheet['!ref']
-  }) as any[][];
+  });
   
   // Process data and build CSV with proper escaping
   let csvContent = '';

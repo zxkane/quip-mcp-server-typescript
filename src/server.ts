@@ -10,8 +10,7 @@ import { URL } from 'url';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import express from 'express';
-import { Request, Response } from 'express';
+import express, { Request, Response } from 'express';
 import {
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
@@ -24,7 +23,10 @@ import {
 import {
   TextContent,
   ImageContent,
-  EmbeddedResource} from './tools';
+  EmbeddedResource,
+  getQuipTools, 
+  handleQuipReadSpreadsheet
+} from './tools';
 
 // Import error handling
 import {
@@ -39,7 +41,6 @@ import { StorageInterface } from './types';
 import { parseCommandLineArgs, configureLogging, getStoragePath } from './cli';
 import { version } from './version';
 import { createStorage } from './storage';
-import { getQuipTools, handleQuipReadSpreadsheet } from './tools';
 
 // Load environment variables
 dotenv.config();
