@@ -1,5 +1,5 @@
 {
-  "name": "quip-mcp-server",
+  "name": "@zxkane/quip-mcp-server",
   "version": "1.0.0",
   "description": "MCP server for interacting with Quip spreadsheets",
   "main": "dist/index.js",

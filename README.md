@@ -52,10 +52,10 @@ A Model Context Protocol (MCP) server for interacting with Quip spreadsheets, im
 
 ```bash
 # Install globally
-npm install -g quip-mcp-server
+npm install -g @zxkane/quip-mcp-server
 
 # Or install locally in your project
-npm install quip-mcp-server
+npm install @zxkane/quip-mcp-server
 ```
 
 ### From Source
@@ -424,7 +424,7 @@ quip-mcp-server-typescript/
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/quip-mcp-server-typescript.git
+git clone https://github.com/zxkane/quip-mcp-server-typescript.git
 cd quip-mcp-server-typescript
 
 # Install dependencies
