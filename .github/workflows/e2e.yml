@@ -1,0 +1,128 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: Install server dependencies
+      run: npm ci
+
+    - name: Build server
+      run: npm run build
+
+    - name: Install example-client dependencies
+      working-directory: ./example-client
+      run: npm ci
+
+    - name: Build example-client
+      working-directory: ./example-client
+      run: npm run build
+
+    - name: Create .env.local from secrets
+      working-directory: ./example-client
+      run: |
+        cat > .env.local << EOF
+        QUIP_TOKEN=${{ secrets.QUIP_TOKEN }}
+        QUIP_BASE_URL=${{ secrets.QUIP_BASE_URL }}
+        QUIP_THREAD_ID=${{ secrets.QUIP_THREAD_ID }}
+        QUIP_SHEET_NAME=${{ secrets.QUIP_SHEET_NAME }}
+        EOF
+        # Ensure the file doesn't have permissions that are too open
+        chmod 600 .env.local
+
+    - name: E2E Test with stdio transport
+      working-directory: ./example-client
+      env:
+        NODE_NO_WARNINGS: 1
+      run: |
+        echo "Running E2E test with stdio transport"
+        # Redirect output to files to avoid leaking secrets in logs
+        node build/index.js > stdio-test-output.txt 2> stdio-test-error.txt || { echo "Stdio transport test failed"; exit 1; }
+        # Check for success markers in output without displaying full content
+        grep -q "Connected to Quip MCP server using stdio transport" stdio-test-output.txt || { echo "Failed to connect with stdio transport"; exit 1; }
+        grep -q "Test completed successfully" stdio-test-output.txt || { echo "Failed to retrieve spreadsheet data"; exit 1; }
+
+    - name: Start server for HTTP transport test
+      env:
+        PORT: 3000
+        QUIP_TOKEN: ${{ secrets.QUIP_TOKEN }}
+        QUIP_BASE_URL: ${{ secrets.QUIP_BASE_URL }}
+      run: |
+        echo "Starting server for HTTP transport test"
+        # Create storage directory
+        mkdir -p /tmp/mcp/quip-mcp-server
+        # Run server in background with minimal logging to avoid leaking secrets
+        node dist/index.js --storage-path /tmp/mcp/quip-mcp-server --file-protocol > server.log 2>&1 &
+        echo $! > server.pid
+        # Give the server time to start
+        sleep 3
+        # Check if server is running
+        if ! ps -p $(cat server.pid) > /dev/null; then
+          echo "Server failed to start"
+          cat server.log | grep -v "token\|secret\|password\|key" # Filter out potential secret lines
+          exit 1
+        fi
+
+    - name: E2E Test with HTTP transport
+      working-directory: ./example-client
+      env:
+        NODE_NO_WARNINGS: 1
+      run: |
+        echo "Running E2E test with HTTP transport"
+        # Redirect output to files to avoid leaking secrets in logs
+        node build/index.js --http --port 3000 > http-test-output.txt 2> http-test-error.txt || { echo "HTTP transport test failed"; exit 1; }
+        # Check for success markers in output without displaying full content
+        grep -q "Connected to Quip MCP server using HTTP transport" http-test-output.txt || { echo "Failed to connect with HTTP transport"; exit 1; }
+        grep -q "Test completed successfully" http-test-output.txt || { echo "Failed to retrieve spreadsheet data"; exit 1; }
+
+    - name: Stop HTTP server
+      if: always() # Run this step even if previous steps failed
+      run: |
+        if [ -f server.pid ]; then
+          if ps -p $(cat server.pid) > /dev/null; then
+            kill $(cat server.pid)
+            echo "Server stopped"
+          fi
+          rm server.pid
+        fi
+
+    - name: Process test logs for security
+      if: always() # Run this step even if previous steps failed
+      run: |
+        # Process logs to remove any potential secrets before storing
+        if [ -f example-client/stdio-test-output.txt ]; then
+          # Filter logs to remove sensitive information but retain error context
+          cat example-client/stdio-test-output.txt | grep -v "token\|secret\|password\|key" > sanitized-stdio-output.txt
+        fi
+        if [ -f example-client/http-test-output.txt ]; then
+          cat example-client/http-test-output.txt | grep -v "token\|secret\|password\|key" > sanitized-http-output.txt
+        fi
+        
+    - name: Upload sanitized test logs
+      uses: actions/upload-artifact@v4
+      if: always() # Run this step even if previous steps failed
+      with:
+        name: e2e-test-logs
+        path: |
+          sanitized-stdio-output.txt
+          sanitized-http-output.txt
+          server.log

@@ -26,7 +26,7 @@ export async function runHttpClient(
     
     console.log(`Starting standalone server on port ${port} and connecting via HTTP...`);
     console.log(`Note: You need to manually start the server with the following command in a separate terminal:`);
-    console.log(`QUIP_TOKEN='${quipToken}' QUIP_BASE_URL='${quipBaseUrl}' PORT=${port} node dist/index.js --storage-path /data/tmp/mcp/quip-mcp-server --debug`);
+    console.log(`QUIP_TOKEN='<your token>' QUIP_BASE_URL='<your url>' PORT=${port} node dist/index.js --storage-path /data/tmp/mcp/quip-mcp-server`);
     
     // Configure HTTP transport to connect to the correct endpoint
     const url = new URL(`http://localhost:${port}/mcp`);
@@ -42,7 +42,6 @@ export async function runHttpClient(
       url: url.toString(),
       headers: {
         'Content-Type': 'application/json',
-        'X-Quip-Token': '***' // Don't log the actual token
       }
     });
     

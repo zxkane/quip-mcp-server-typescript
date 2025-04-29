@@ -89,7 +89,7 @@ export class Logger {
    * @param context Additional context to include in all log entries
    */
   constructor(config: Partial<LoggerConfig> = {}, context: Record<string, any> = {}) {
-    const level = config.level ?? LogLevel.INFO;
+    const level = config.level ?? LogLevel.WARN;
     const shouldUseTimestamps = config.timestamps ?? true;
     const shouldUseJSON = config.json ?? false;
     const logFile = config.logFile;
@@ -296,7 +296,7 @@ export class Logger {
    * @param config Logger configuration
    */
   reconfigure(config: Partial<LoggerConfig> = {}): void {
-    const level = config.level ?? LogLevel.INFO;
+    const level = config.level ?? LogLevel.WARN;
     const shouldUseTimestamps = config.timestamps ?? true;
     const shouldUseJSON = config.json ?? false;
     const logFile = config.logFile;
@@ -378,7 +378,7 @@ export const logger = new Logger();
  */
 export function configureLogger(options: { debug?: boolean, json?: boolean, logFile?: string } = {}): Logger {
   const config: Partial<LoggerConfig> = {
-    level: options.debug ? LogLevel.DEBUG : LogLevel.INFO,
+    level: options.debug ? LogLevel.DEBUG : LogLevel.WARN,
     json: options.json || false,
     timestamps: true,
     logFile: options.logFile
