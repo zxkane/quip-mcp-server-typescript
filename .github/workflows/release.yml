@@ -36,7 +36,14 @@ jobs:
 
     - name: Update package version if from tag
       if: startsWith(github.ref, 'refs/tags/v')
-      run: npm version ${{ steps.get_version.outputs.VERSION }} --no-git-tag-version
+      run: |
+        CURRENT_VERSION=$(node -p "require('./package.json').version")
+        TAG_VERSION=${{ steps.get_version.outputs.VERSION }}
+        if [ "$CURRENT_VERSION" != "$TAG_VERSION" ]; then
+          npm version $TAG_VERSION --no-git-tag-version
+        else
+          echo "Package version $CURRENT_VERSION already matches tag version, skipping update"
+        fi
 
     - name: Publish to npm
       run: npm publish
