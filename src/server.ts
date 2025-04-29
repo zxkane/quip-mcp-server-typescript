@@ -14,7 +14,8 @@ import {
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
-  CallToolRequestSchema
+  CallToolRequestSchema,
+  ListResourceTemplatesRequestSchema
 } from '@modelcontextprotocol/sdk/types.js';
 
 // Import types from our local definitions
@@ -52,6 +53,49 @@ interface Resource {
   name: string;
   description: string;
   mime_type?: string;
+}
+
+interface ResourceTemplate {
+  uriTemplate: string;
+  name: string;
+  description: string;
+  parameterDefinitions: TemplateParameter[];
+}
+
+interface TemplateParameter {
+  name: string;
+  description: string;
+  required: boolean;
+}
+
+/**
+ * Generate available resource templates
+ * 
+ * @returns Array of resource templates
+ */
+function generateResourceTemplates(): ResourceTemplate[] {
+  logger.info("Generating resource templates");
+  
+  // Create template for Quip spreadsheet with thread ID and optional sheet name
+  const spreadsheetTemplate: ResourceTemplate = {
+    uriTemplate: "quip://{thread_id}?sheet={sheet_name}",
+    name: "Quip Spreadsheet",
+    description: "Access a specific sheet within a Quip spreadsheet document by thread ID and sheet name",
+    parameterDefinitions: [
+      {
+        name: "thread_id",
+        description: "The Quip document thread ID",
+        required: true
+      },
+      {
+        name: "sheet_name",
+        description: "The name of the sheet (if omitted, will use the first sheet)",
+        required: false
+      }
+    ]
+  };
+  
+  return [spreadsheetTemplate];
 }
 
 
@@ -241,7 +285,9 @@ export async function main(): Promise<void> {
     logger.info("Registering capabilities");
     server.registerCapabilities({
       tools: {},
-      resources: {}
+      resources: {
+        templates: true  // Indicate that this server supports resource templates
+      }
     });
     
     // Register tools
@@ -289,6 +335,14 @@ export async function main(): Promise<void> {
       return {
         contents: await accessResource(request.params.uri)
       };
+    });
+    
+    // Register resource templates list handler
+    logger.info("Registering resource templates list handler");
+    server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+      logger.info("Handling resources/list_templates request");
+      const resourceTemplates = generateResourceTemplates();
+      return { resourceTemplates };
     });
     
     // Choose transport based on options
