@@ -2,6 +2,16 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { runClientLogic } from './client-common.js';
 
+interface S3Config {
+  bucket?: string;
+  region?: string;
+  prefix?: string;
+  urlExpiration?: number;
+  awsProfile?: string;
+  awsAccessKeyId?: string;
+  awsSecretAccessKey?: string;
+}
+
 /**
  * Run the client with HTTP transport
  */
@@ -10,7 +20,7 @@ export async function runHttpClient(
   quipBaseUrl: string,
   threadId: string,
   port: number = 3000,
-  sheetName?: string
+  sheetName?: string,
 ): Promise<void> {
   try {
     // Initialize the client
@@ -26,7 +36,11 @@ export async function runHttpClient(
     
     console.log(`Starting standalone server on port ${port} and connecting via HTTP...`);
     console.log(`Note: You need to manually start the server with the following command in a separate terminal:`);
-    console.log(`QUIP_TOKEN='<your token>' QUIP_BASE_URL='<your url>' PORT=${port} node dist/index.js --storage-path /data/tmp/mcp/quip-mcp-server`);
+    
+    // Build example command
+    const exampleCmd = `QUIP_TOKEN='<your token>' QUIP_BASE_URL='<your url>' PORT=${port}`;
+    
+    console.log(exampleCmd);
     
     // Configure HTTP transport to connect to the correct endpoint
     const url = new URL(`http://localhost:${port}/mcp`);
@@ -58,7 +72,10 @@ export async function runHttpClient(
       console.error("3. Verify that the server started successfully (check for error messages)");
       console.error("4. Try a different port if necessary");
       console.error("\nFull command to start the server:");
-      console.error(`QUIP_TOKEN='${quipToken}' QUIP_BASE_URL='${quipBaseUrl}' PORT=${port} node dist/index.js --storage-path /data/tmp/mcp/quip-mcp-server --debug\n`);
+      // Define base command
+      const serverCommand = `QUIP_TOKEN='${quipToken}' QUIP_BASE_URL='${quipBaseUrl}' PORT=${port} node dist/index.js --debug`;
+      
+      console.error(serverCommand + '\n');
       throw error;
     }
     

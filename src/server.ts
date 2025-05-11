@@ -38,7 +38,7 @@ import { logger } from './logger';
 
 // Import types and utilities
 import { StorageInterface } from './types';
-import { parseCommandLineArgs, configureLogging, getStoragePath } from './cli';
+import { parseCommandLineArgs, configureLogging, getStoragePath, getStorageConfig } from './cli';
 import { version } from './version';
 import { createStorage } from './storage';
 
@@ -98,12 +98,41 @@ function generateResourceTemplates(): ResourceTemplate[] {
     ]
   };
   
-  return [spreadsheetTemplate];
+  // Add S3 template for S3 storage
+  const s3SpreadsheetTemplate: ResourceTemplate = {
+    uriTemplate: "s3://{bucket}/{prefix}{thread_id}-{sheet_name}.csv",
+    name: "S3 Spreadsheet",
+    description: "Access a specific sheet within a Quip spreadsheet document stored in S3 by bucket, prefix, thread ID and sheet name",
+    parameterDefinitions: [
+      {
+        name: "bucket",
+        description: "The S3 bucket name",
+        required: true
+      },
+      {
+        name: "prefix",
+        description: "The S3 object key prefix",
+        required: false
+      },
+      {
+        name: "thread_id",
+        description: "The Quip document thread ID",
+        required: true
+      },
+      {
+        name: "sheet_name",
+        description: "The name of the sheet (if omitted, will use the first sheet)",
+        required: false
+      }
+    ]
+  };
+  
+  return [spreadsheetTemplate, s3SpreadsheetTemplate];
 }
 
 
 /**
- * Discover available resources by scanning the storage directory
+ * Discover available resources by scanning the storage
  *
  * @param isFileProtocol Whether to use file protocol for resource URIs
  * @returns Promise resolving to list of available resources
@@ -116,77 +145,86 @@ async function discoverResources(isFileProtocol: boolean): Promise<Resource[]> {
     return [];
   }
   
-  // Check if storage is LocalStorage
-  if (!(storageInstance as any).storagePath) {
-    logger.warn("Storage is not LocalStorage, cannot discover resources");
-    return [];
-  }
-  
   const resources: Resource[] = [];
-  const storagePath = (storageInstance as any).storagePath;
   
-  try {
-    // Scan storage directory for CSV files
-    const files = await fs.readdir(storagePath);
+  // Check the actual storage type, not just property presence
+  const storageType = process.env.STORAGE_TYPE || 'local';
+  
+  if (storageType === 'local') {
+    logger.info("Local storage detected, scanning for resources");
+    // Local storage - scan directory for CSV files
+    const storagePath = (storageInstance as any).storagePath;
     
-    for (const filename of files) {
-      if (filename.endsWith(".csv") && !filename.endsWith(".meta")) {
-        // Parse filename to get thread_id and sheet_name
-        const filePath = path.join(storagePath, filename);
-        
-        // Extract thread_id and sheet_name from filename
-        let threadId: string;
-        let sheetName: string | undefined;
-        
-        if (filename.includes("-")) {
-          // Format: {thread_id}-{sheet_name}.csv
-          threadId = filename.split("-")[0];
-          sheetName = filename.split("-").slice(1).join("-").replace(".csv", "");
-        } else {
-          // Format: {thread_id}.csv
-          threadId = filename.replace(".csv", "");
-          sheetName = undefined;
+    try {
+      // Scan storage directory for CSV files
+      const files = await fs.readdir(storagePath);
+      
+      for (const filename of files) {
+        if (filename.endsWith(".csv") && !filename.endsWith(".meta")) {
+          // Parse filename to get thread_id and sheet_name
+          const filePath = path.join(storagePath, filename);
+          
+          // Extract thread_id and sheet_name from filename
+          let threadId: string;
+          let sheetName: string | undefined;
+          
+          if (filename.includes("-")) {
+            // Format: {thread_id}-{sheet_name}.csv
+            threadId = filename.split("-")[0];
+            sheetName = filename.split("-").slice(1).join("-").replace(".csv", "");
+          } else {
+            // Format: {thread_id}.csv
+            threadId = filename.replace(".csv", "");
+            sheetName = undefined;
+          }
+          
+          // Get metadata
+          const metadata = await storageInstance.getMetadata(threadId, sheetName);
+          
+          // Create resource URI
+          let resourceUri: string;
+          if (isFileProtocol) {
+            resourceUri = `file://${filePath}`;
+          } else {
+            // Use resource template to create resource URI
+            resourceUri = storageInstance.getResourceURI(threadId, sheetName);
+          }
+          
+          // Create resource name
+          let resourceName = `Quip Thread(Spreadsheet): ${threadId}`;
+          if (sheetName) {
+            resourceName += ` (Sheet: ${sheetName})`;
+          }
+          if (isFileProtocol) {
+            resourceName += ` You can access the file at: ${filePath}`;
+          }
+          
+          // Create resource description
+          const description = `CSV data from Quip spreadsheet. ${metadata.total_rows || 0} rows, ${metadata.total_size || 0} bytes.`;
+          
+          // Create resource
+          const resource: Resource = {
+            uri: resourceUri,
+            name: resourceName,
+            description: description,
+            mime_type: "text/csv"
+          };
+          
+          resources.push(resource);
+          logger.info(`Discovered resource: ${resourceUri}`);
         }
-        
-        // Get metadata
-        const metadata = await storageInstance.getMetadata(threadId, sheetName);
-        
-        // Create resource URI
-        let resourceUri: string;
-        if (isFileProtocol) {
-          resourceUri = `file://${filePath}`;
-        } else {
-          // Use resource template to create resource URI
-          resourceUri = storageInstance.getResourceURI(threadId, sheetName);
-        }
-        
-        // Create resource name
-        let resourceName = `Quip Thread(Spreadsheet): ${threadId}`;
-        if (sheetName) {
-          resourceName += ` (Sheet: ${sheetName})`;
-        }
-        if (isFileProtocol) {
-          resourceName += ` You can access the file at: ${filePath}`;
-        }
-        
-        // Create resource description
-        const description = `CSV data from Quip spreadsheet. ${metadata.total_rows || 0} rows, ${metadata.total_size || 0} bytes.`;
-        
-        // Create resource
-        const resource: Resource = {
-          uri: resourceUri,
-          name: resourceName,
-          description: description,
-          mime_type: "text/csv"
-        };
-        
-        resources.push(resource);
-        logger.info(`Discovered resource: ${resourceUri}`);
       }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Error discovering resources`, { error: errorMessage });
     }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(`Error discovering resources`, { error: errorMessage });
+  } else if (storageType === 's3') {
+    // S3 storage - we can't easily list objects, so we'll just log a message
+    logger.info("S3 storage detected - resource discovery not supported for S3 storage");
+    logger.info("Resources will be accessible via s3:// or https:// URIs when accessed directly");
+    return []; // Return empty array for S3 to prevent any accidental local resource discovery
+  } else {
+    logger.warn("Unknown storage type, cannot discover resources");
   }
   
   logger.info(`Discovered ${resources.length} resources`);
@@ -205,7 +243,7 @@ async function accessResource(uri: string): Promise<(TextContent | ImageContent 
   // Parse the URI
   const parsedUri = new URL(uri);
   
-  if (parsedUri.protocol !== 'quip:' && parsedUri.protocol !== 'file:') {
+  if (parsedUri.protocol !== 'quip:' && parsedUri.protocol !== 'file:' && parsedUri.protocol !== 's3:') {
     logger.error(`Unsupported URI scheme: ${parsedUri.protocol}`);
     throw new ResourceNotFoundError(uri);
   }
@@ -218,7 +256,18 @@ async function accessResource(uri: string): Promise<(TextContent | ImageContent 
     const filename = path.basename(parsedUri.pathname).replace(".csv", "").split("-");
     threadId = filename[0];
     sheetName = filename.length > 1 ? filename.slice(1).join("-") : undefined;
+  } else if (parsedUri.protocol === 's3:') {
+    // Extract from S3 URI format: s3://{bucket}/{prefix}{threadId}-{sheetName}.csv
+    // or s3+https://{bucket}/{prefix}{threadId}-{sheetName}.csv
+    // The path will be /{bucket}/{prefix}{threadId}-{sheetName}.csv
+    // We need to extract the threadId and sheetName from the key
+    const pathParts = parsedUri.pathname.split('/');
+    // The last part is the filename: {threadId}-{sheetName}.csv
+    const filename = pathParts[pathParts.length - 1].replace(".csv", "").split("-");
+    threadId = filename[0];
+    sheetName = filename.length > 1 ? filename.slice(1).join("-") : undefined;
   } else {
+    // quip:// protocol
     threadId = parsedUri.hostname;
     const searchParams = new URLSearchParams(parsedUri.search);
     sheetName = searchParams.get('sheet') || undefined;
@@ -272,11 +321,34 @@ export async function main(): Promise<void> {
     // Get storage path from options or environment
     const storagePath = getStoragePath(options);
     
-    // Initialize storage
-    storageInstance = createStorage('local', {
+    // Get storage configuration
+    const storageConfig = getStorageConfig(options);
+    
+    // Initialize storage based on storage type
+    const storageOptions = {
       storagePath,
-      isFileProtocol: options.fileProtocol
-    });
+      isFileProtocol: options.fileProtocol,
+      s3Bucket: storageConfig.s3Bucket,
+      s3Region: storageConfig.s3Region,
+      s3Prefix: storageConfig.s3Prefix,
+      s3UrlExpiration: storageConfig.s3UrlExpiration
+    };
+    
+    // No matter what, create the storage path directory because some functions might assume it exists
+    try {
+      if (storageConfig.storageType === 's3') {
+        // For S3 storage, log but don't create local storage path
+        logger.info(`Using S3 storage, local path "${storagePath}" will not be used for storage`);
+      } else {
+        // For local storage, ensure the directory exists
+        fs.mkdirpSync(storagePath);
+      }
+    } catch (error) {
+      logger.warn(`Could not ensure storage path exists: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    
+    logger.info(`Initializing ${storageConfig.storageType} storage`);
+    storageInstance = createStorage(storageConfig.storageType, storageOptions);
     
     // Create a minimal MCP server
     const server = new Server({

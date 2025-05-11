@@ -18,6 +18,14 @@ A Model Context Protocol (MCP) server for interacting with Quip spreadsheets, im
   - [quip_read_spreadsheet](#quip_read_spreadsheet)
 - [Resource URIs](#resource-uris)
 - [How It Works](#how-it-works)
+  - [Error Handling](#error-handling)
+  - [Mock Mode](#mock-mode)
+  - [Structured Logging](#structured-logging)
+  - [Authentication](#authentication)
+  - [Caching](#caching)
+  - [Storage Options](#storage-options)
+    - [Local Storage](#local-storage)
+    - [S3 Storage](#s3-storage)
 - [Health Check Endpoint](#health-check-endpoint)
 - [Development](#development)
   - [Project Structure](#project-structure)
@@ -38,6 +46,7 @@ A Model Context Protocol (MCP) server for interacting with Quip spreadsheets, im
 - Provides appropriate error messages for non-spreadsheet documents
 - Automatically handles large spreadsheets by truncating content when necessary
 - Stores spreadsheet content locally for efficient access
+- **Multiple storage options** including local filesystem and Amazon S3
 - Provides resource URIs for accessing complete spreadsheet content
 - **Enhanced error handling** with detailed error messages and proper error types
 - **Mock mode** for testing without a real Quip API token
@@ -83,8 +92,17 @@ QUIP_TOKEN=your_quip_api_token_here
 # Quip API base URL (optional, defaults to https://platform.quip.com)
 QUIP_BASE_URL=https://platform.quip.com
 
+# Storage type (optional, defaults to 'local', can be 'local' or 's3')
+# STORAGE_TYPE=local
+
 # Storage path for CSV files (optional, defaults to ~/.quip-mcp-server/storage)
 QUIP_STORAGE_PATH=/path/to/storage
+
+# S3 storage configuration (required when STORAGE_TYPE=s3)
+# S3_BUCKET=your-bucket-name
+# S3_REGION=us-east-1
+# S3_PREFIX=quip-data/
+# S3_URL_EXPIRATION=3600
 
 # MCP server port (optional, defaults to 3000)
 MCP_PORT=3000
@@ -184,8 +202,14 @@ If you want to use the file protocol for resource URIs:
 
 The server supports the following command line arguments:
 
+- `--storage-type <type>`: Storage type (local or s3, defaults to 'local')
 - `--storage-path <path>`: Path to store CSV files (defaults to QUIP_STORAGE_PATH environment variable or ~/.quip-mcp-server/storage)
 - `--file-protocol`: Use file protocol for resource URIs (instead of quip:// protocol)
+- `--s3-bucket <name>`: S3 bucket name (required for S3 storage)
+- `--s3-region <region>`: S3 region (required for S3 storage)
+- `--s3-prefix <prefix>`: S3 prefix (optional for S3 storage)
+- `--s3-url-expiration <seconds>`: S3 URL expiration in seconds (default: 3600)
+- `--use-presigned-urls`: Generate presigned HTTPS URLs for S3 resources (instead of s3:// URIs)
 - `--debug`: Enable debug logging
 - `--mock`: Use mock mode (no real Quip token required)
 - `--json`: Output logs as JSON
@@ -262,6 +286,32 @@ The tool returns a JSON object containing:
 }
 ```
 
+**Example Response (with S3 storage):**
+```json
+{
+  "csv_content": "header1,header2\nvalue1,value2\n...",
+  "metadata": {
+    "total_rows": 1000,
+    "total_size": 52840,
+    "is_truncated": true,
+    "resource_uri": "s3://my-bucket/quip-data/AbCdEfGhIjKl-Sheet1.csv"
+  }
+}
+```
+
+**Example Response (with S3 storage and --use-presigned-urls):**
+```json
+{
+  "csv_content": "header1,header2\nvalue1,value2\n...",
+  "metadata": {
+    "total_rows": 1000,
+    "total_size": 52840,
+    "is_truncated": true,
+    "resource_uri": "https://my-bucket.s3.us-east-1.amazonaws.com/quip-data/AbCdEfGhIjKl-Sheet1.csv?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=..."
+  }
+}
+```
+
 **Error Handling:**
 - If the thread is not a spreadsheet, an error will be returned.
 - If the specified sheet is not found, an error will be returned.
@@ -270,7 +320,7 @@ The tool returns a JSON object containing:
 
 The server provides resource URIs for accessing complete spreadsheet content. These URIs can be used with the MCP resource access mechanism.
 
-By default, the server uses the `quip://` protocol for resource URIs. However, you can use the `--file-protocol` option to use the `file://` protocol instead, which points directly to the local CSV files.
+The server supports multiple URI formats depending on the configuration:
 
 #### Default Protocol (quip://)
 
@@ -294,6 +344,35 @@ file://{storage_path}/{threadId}-{sheetName}.csv
 **Example:**
 ```
 file:///home/user/.quip-mcp-server/storage/AbCdEfGhIjKl-Sheet1.csv
+```
+
+#### S3 Protocol (when using S3 storage)
+
+**URI Format:**
+```
+s3://{bucket}/{prefix}/{threadId}-{sheetName}.csv
+```
+
+**Example:**
+```
+s3://my-bucket/quip-data/AbCdEfGhIjKl-Sheet1.csv
+```
+
+#### Presigned S3 URLs (when using S3 storage with USE_PRESIGNED_URLS=true)
+
+**URI Format:**
+```
+s3+https://{bucket}/{prefix}/{threadId}-{sheetName}.csv
+```
+
+Which resolves to an HTTPS URL:
+```
+https://{bucket}.s3.{region}.amazonaws.com/{prefix}/{threadId}-{sheetName}.csv?{authentication_params}
+```
+
+**Example:**
+```
+https://my-bucket.s3.us-east-1.amazonaws.com/quip-data/AbCdEfGhIjKl-Sheet1.csv?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=...
 ```
 
 When accessed, the resource returns the complete CSV content of the spreadsheet, regardless of size.
@@ -364,6 +443,52 @@ Two types of caches are used:
 - `metadataCache`: For caching metadata (30 minutes TTL)
 
 The caching system automatically handles cache invalidation based on TTL (Time To Live) values and implements a simple LRU (Least Recently Used) strategy to prevent memory issues when dealing with many resources. This ensures optimal performance while maintaining reasonable memory usage.
+
+### Storage Options
+
+The server supports two storage options:
+
+#### Local Storage
+
+By default, the server uses local file system storage to store CSV files. This is suitable for most use cases and provides good performance.
+
+To configure local storage:
+```bash
+# Using environment variables
+STORAGE_TYPE=local QUIP_STORAGE_PATH=/path/to/storage npm start
+
+# Using command line arguments
+npm start -- --storage-type local --storage-path /path/to/storage
+```
+
+#### S3 Storage
+
+For production deployments or when you need to share data across multiple instances, you can use Amazon S3 storage. This allows you to store CSV files in an S3 bucket.
+
+To configure S3 storage:
+```bash
+# Using environment variables
+STORAGE_TYPE=s3 S3_BUCKET=your-bucket-name S3_REGION=us-east-1 npm start
+
+# Using command line arguments
+npm start -- --storage-type s3 --s3-bucket your-bucket-name --s3-region us-east-1
+```
+
+Additional S3 configuration options:
+- `S3_PREFIX` / `--s3-prefix`: Prefix for S3 object keys (e.g., "quip-data/")
+- `S3_URL_EXPIRATION` / `--s3-url-expiration`: URL expiration in seconds (default: 3600)
+- `USE_PRESIGNED_URLS`: Set to "true" to generate presigned HTTPS URLs for direct access to S3 resources
+
+**Presigned S3 URLs**:
+When `USE_PRESIGNED_URLS` is set to "true", the server will generate presigned HTTPS URLs for resource URIs instead of s3:// URIs. This allows direct access to the resources without requiring AWS credentials or special S3 client libraries. Presigned URLs are temporary and expire after the time specified by `S3_URL_EXPIRATION` (default: 3600 seconds).
+
+**AWS Authentication**:
+The S3 storage implementation uses the AWS SDK, which automatically loads credentials from the environment. You can provide AWS credentials using any of the standard methods:
+- Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
+- Shared credentials file (`~/.aws/credentials`)
+- IAM roles for Amazon EC2 or ECS tasks
+
+For more information on AWS authentication, see the [AWS SDK documentation](https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/setting-credentials-node.html).
 
 ## Health Check Endpoint
 
