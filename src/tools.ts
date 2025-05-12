@@ -42,7 +42,7 @@ export function getQuipTools(): Tool[] {
   return [
     {
       name: "quip_read_spreadsheet",
-      description: "Read the content of a Quip spreadsheet by its thread ID. Returns a JSON object containing truncated CSV content (limited to 10KB) and metadata. For large spreadsheets, the returned content may be truncated. To access the complete CSV data, use the resource interface with URI format 'quip://spreadsheet/{threadId}/{sheetName}' or 'file:///<storage path>/{threadId}-{sheetName}.csv'. The returned data structure includes: { 'csv_content': string (possibly truncated CSV data), 'metadata': { 'rows': number, 'columns': number, 'is_truncated': boolean, 'resource_uri': string } }",
+      description: "Read the content of a Quip spreadsheet by its thread ID. Returns a JSON object containing truncated CSV content (limited to 10KB) and metadata. For large spreadsheets, the returned content may be truncated. To access the complete CSV data, use the resource interface with URI format: 'quip://{threadId}?sheet={sheetName}' for local storage, 'file:///<storage path>/{threadId}-{sheetName}.csv' for file protocol, 's3://{bucket}/{prefix}{threadId}-{sheetName}.csv' for S3 storage identification, or HTTPS URLs (presigned S3 URLs) for direct access to S3 resources when S3 storage is used. The returned data structure includes: { 'csv_content': string (possibly truncated CSV data), 'metadata': { 'rows': number, 'columns': number, 'is_truncated': boolean, 'resource_uri': string } }",
       inputSchema: {
         type: "object",
         properties: {
@@ -182,6 +182,20 @@ export async function handleQuipReadSpreadsheet(
   
   // Update metadata with truncation info
   metadata.is_truncated = isTruncated;
+  if (metadata.resource_uri.startsWith('s3+https://') && 
+        typeof (storage as any).generatePresignedUrl === 'function') {
+    logger.debug(`Converting s3+https:// URI to presigned URL for thread_id: ${threadId}, sheet_name: ${sheetName || 'default'}`);
+    try {
+      // Generate a presigned URL
+      const presignedUrl = await (storage as any).generatePresignedUrl(threadId, sheetName);
+      // Update the URI to use the presigned URL
+      metadata.resource_uri = presignedUrl;
+      logger.info(`Generated presigned URL: ${presignedUrl}`);
+    } catch (error) {
+      logger.error(`Failed to generate presigned URL: ${error instanceof Error ? error.message : String(error)}`);
+      // Continue with the original URI
+    }
+  }
   
   // Create response with CSV content and metadata
   const responseData = {

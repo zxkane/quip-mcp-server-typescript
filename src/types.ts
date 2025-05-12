@@ -17,6 +17,31 @@ export interface CommandLineOptions {
   fileProtocol: boolean;
   
   /**
+   * Storage type (local or s3)
+   */
+  storageType: string;
+  
+  /**
+   * S3 bucket name (for S3 storage)
+   */
+  s3Bucket?: string;
+  
+  /**
+   * S3 region (for S3 storage)
+   */
+  s3Region?: string;
+  
+  /**
+   * S3 prefix (for S3 storage)
+   */
+  s3Prefix?: string;
+  
+  /**
+   * S3 URL expiration in seconds (for S3 storage)
+   */
+  s3UrlExpiration?: number;
+  
+  /**
    * Whether to enable debug logging
    */
   debug: boolean;
@@ -147,6 +172,26 @@ export interface StorageOptions {
    * Whether to use file protocol for resource URIs
    */
   isFileProtocol: boolean;
+
+  /**
+   * S3 bucket name (for S3 storage)
+   */
+  s3Bucket?: string;
+
+  /**
+   * S3 region (for S3 storage)
+   */
+  s3Region?: string;
+
+  /**
+   * S3 prefix (for S3 storage)
+   */
+  s3Prefix?: string;
+
+  /**
+   * S3 URL expiration in seconds (for S3 storage)
+   */
+  s3UrlExpiration?: number;
 }
 
 /**

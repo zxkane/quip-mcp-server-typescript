@@ -21,6 +21,11 @@ export function parseCommandLineArgs(): CommandLineOptions {
     .description('MCP server for interacting with Quip spreadsheets')
     .version(version)
     .option(
+      '--storage-type <type>',
+      'Storage type (local or s3)',
+      'local'
+    )
+    .option(
       '--storage-path <path>',
       'Path to store CSV files (default: from QUIP_STORAGE_PATH env var or ~/.quip-mcp-server/storage)'
     )
@@ -28,6 +33,23 @@ export function parseCommandLineArgs(): CommandLineOptions {
       '--file-protocol',
       'Use file protocol for resource URIs',
       false
+    )
+    .option(
+      '--s3-bucket <name>',
+      'S3 bucket name (required for S3 storage)'
+    )
+    .option(
+      '--s3-region <region>',
+      'S3 region (required for S3 storage)'
+    )
+    .option(
+      '--s3-prefix <prefix>',
+      'S3 prefix (optional for S3 storage)'
+    )
+    .option(
+      '--s3-url-expiration <seconds>',
+      'S3 URL expiration in seconds (default: 3600)',
+      (value) => parseInt(value, 10)
     )
     .option(
       '--debug',
@@ -74,7 +96,7 @@ export function parseCommandLineArgs(): CommandLineOptions {
 
 /**
  * Get storage path from command line options or environment variables
- * 
+ *
  * @param options Command line options
  * @returns Storage path
  */
@@ -94,6 +116,37 @@ export function getStoragePath(options: { storagePath?: string }): string {
   const defaultPath = path.join(os.homedir(), '.quip-mcp-server', 'storage');
   logger.info(`Using default storage path: ${defaultPath}`);
   return defaultPath;
+}
+
+/**
+ * Get storage configuration from command line options or environment variables
+ *
+ * @param options Command line options
+ * @returns Storage configuration
+ */
+export function getStorageConfig(options: CommandLineOptions): {
+  storageType: string;
+  s3Bucket?: string;
+  s3Region?: string;
+  s3Prefix?: string;
+  s3UrlExpiration?: number;
+} {
+  // Get storage type
+  const storageType = options.storageType || process.env.STORAGE_TYPE || 'local';
+  
+  // Get S3 configuration if needed
+  if (storageType === 's3') {
+    return {
+      storageType,
+      s3Bucket: options.s3Bucket || process.env.S3_BUCKET,
+      s3Region: options.s3Region || process.env.S3_REGION,
+      s3Prefix: options.s3Prefix || process.env.S3_PREFIX,
+      s3UrlExpiration: options.s3UrlExpiration ||
+        (process.env.S3_URL_EXPIRATION ? parseInt(process.env.S3_URL_EXPIRATION, 10) : undefined)
+    };
+  }
+  
+  return { storageType };
 }
 
 /**

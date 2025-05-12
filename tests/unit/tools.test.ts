@@ -47,11 +47,11 @@ describe('Tools Implementation', () => {
   const mockStorage: StorageInterface = {
     saveCSV: jest.fn().mockResolvedValue('/mock/path/file.csv'),
     getCSV: jest.fn().mockResolvedValue('mock,csv\ndata,here'),
-    getResourceURI: jest.fn().mockReturnValue('quip://mock-thread-id'),
+    getResourceURI: jest.fn().mockReturnValue('s3://test-bucket/mock-thread-id.csv'),
     getMetadata: jest.fn().mockResolvedValue({
       total_rows: 2,
       total_size: 20,
-      resource_uri: 'quip://mock-thread-id',
+      resource_uri: 's3://test-bucket/mock-thread-id.csv',
       last_updated: '2023-01-01T00:00:00Z'
     })
   };
@@ -160,7 +160,7 @@ describe('Tools Implementation', () => {
               total_rows: 2,
               total_size: mockCSVContent.length,
               is_truncated: false,
-              resource_uri: 'quip://mock-thread-id'
+              resource_uri: 's3://test-bucket/mock-thread-id.csv'
             }
           })
         }];
@@ -232,7 +232,7 @@ describe('Tools Implementation', () => {
               total_rows: 2,
               total_size: mockCSVContent.length,
               is_truncated: false,
-              resource_uri: 'quip://mock-thread-id'
+              resource_uri: 's3://test-bucket/mock-thread-id.csv'
             }
           })
         }];
@@ -361,7 +361,7 @@ describe('Tools Implementation', () => {
               total_rows: 1000,
               total_size: largeCSV.length,
               is_truncated: true,
-              resource_uri: 'quip://mock-thread-id'
+              resource_uri: 's3://test-bucket/mock-thread-id.csv'
             }
           })
         }];

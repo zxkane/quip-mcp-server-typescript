@@ -1,10 +1,64 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { parse } from 'csv-parse/sync';
+import { URL } from 'url';
 import { 
   ListToolsResultSchema, 
   CallToolResultSchema, 
   ReadResourceResultSchema 
 } from "@modelcontextprotocol/sdk/types.js";
+
+/**
+ * Extract thread ID and sheet name from a resource URI
+ * 
+ * @param uri Resource URI (quip://, file://, s3://, or https:// for presigned S3 URLs)
+ * @returns Object containing threadId and optional sheetName
+ * @throws Error if URI protocol is not supported
+ */
+export function extractResourceInfo(uri: string): { threadId: string, sheetName?: string } {
+  // Parse the URI
+  const parsedUri = new URL(uri);
+  
+  // Extract thread_id and sheet_name based on protocol
+  let threadId: string;
+  let sheetName: string | undefined;
+  
+  if (parsedUri.protocol === 'file:') {
+    // Format: file:///path/to/{threadId}-{sheetName}.csv
+    const pathParts = parsedUri.pathname.split('/');
+    const filename = pathParts[pathParts.length - 1].replace(".csv", "").split("-");
+    threadId = filename[0];
+    sheetName = filename.length > 1 ? filename.slice(1).join("-") : undefined;
+  } else if (parsedUri.protocol === 's3:') {
+    // Format: s3://{bucket}/{prefix}{threadId}-{sheetName}.csv
+    const pathParts = parsedUri.pathname.split('/');
+    const filename = pathParts[pathParts.length - 1].replace(".csv", "").split("-");
+    threadId = filename[0];
+    sheetName = filename.length > 1 ? filename.slice(1).join("-") : undefined;
+  } else if (parsedUri.protocol === 'https:') {
+    // Format: https://{bucket}.s3.{region}.amazonaws.com/{prefix}{threadId}-{sheetName}.csv?...
+    // or other variations of presigned S3 URLs
+    
+    // Extract the path part (ignoring query parameters)
+    const pathParts = parsedUri.pathname.split('/');
+    const filename = pathParts[pathParts.length - 1].replace(".csv", "").split("-");
+    
+    if (filename.length === 0) {
+      throw new Error(`Invalid HTTPS resource URI: ${uri}`);
+    }
+    
+    threadId = filename[0];
+    sheetName = filename.length > 1 ? filename.slice(1).join("-") : undefined;
+  } else if (parsedUri.protocol === 'quip:') {
+    // Format: quip://{threadId}?sheet={sheetName}
+    threadId = parsedUri.hostname;
+    const searchParams = new URLSearchParams(parsedUri.search);
+    sheetName = searchParams.get('sheet') || undefined;
+  } else {
+    throw new Error(`Unsupported URI protocol: ${parsedUri.protocol}`);
+  }
+  
+  return { threadId, sheetName };
+}
 
 /**
  * Common client functionality shared between different transport types
@@ -88,12 +142,25 @@ export async function runClientLogic(client: Client, threadId: string, sheetName
           console.log(`Truncated: ${responseData.metadata.is_truncated ? 'Yes' : 'No'}`);
           console.log(`Resource URI: ${responseData.metadata.resource_uri}`);
           
+          // Check if CSV content exceeds 10,000 characters and truncate if necessary
+          const MAX_DISPLAY_LENGTH = 10000;
+          let displayContent = responseData.csv_content;
+          let clientTruncated = false;
+          
+          if (displayContent.length > MAX_DISPLAY_LENGTH) {
+            displayContent = displayContent.substring(0, MAX_DISPLAY_LENGTH);
+            clientTruncated = true;
+            console.log(`\nNote: CSV content truncated to ${MAX_DISPLAY_LENGTH} characters for display`);
+            console.log(`Original content length: ${responseData.csv_content.length} characters`);
+          }
+          
           console.log('\nCSV Content Preview:');
           console.log('-------------------');
-          // Parse CSV content using csv-parse library
-          const records = parse(responseData.csv_content, {
+          // Parse CSV content using csv-parse library (using the possibly truncated content)
+          const records = parse(displayContent, {
             columns: true,
-            skip_empty_lines: true
+            skip_empty_lines: true,
+            relax_column_count: true // More tolerant parsing for truncated content
           });
           
           // Display first 5 rows of parsed CSV
@@ -101,14 +168,36 @@ export async function runClientLogic(client: Client, threadId: string, sheetName
           const previewRows = records.slice(0, Math.min(5, records.length));
           console.table(previewRows);
           
+          if (clientTruncated) {
+            console.log('... (content truncated for display purposes)');
+          }
+          
           if (responseData.metadata.is_truncated && responseData.metadata.resource_uri) {
-            console.log('... (content truncated)');
+            console.log('... (server-side content truncated)');
             
             // Access the complete content through resource URI
             console.log('\nAccessing complete content through resource URI...');
             
             try {
               console.log('Sending read_resource request...');
+              console.log(`Resource URI: ${responseData.metadata.resource_uri}`);
+              
+              // Log the protocol of the resource URI
+              const resourceUri = responseData.metadata.resource_uri;
+              const parsedUri = new URL(resourceUri);
+              console.log(`Resource URI protocol: ${parsedUri.protocol}`);
+              
+              // Extract thread ID and sheet name from resource URI
+              try {
+                const { threadId: resourceThreadId, sheetName: resourceSheetName } = extractResourceInfo(resourceUri);
+                console.log(`Extracted Thread ID: ${resourceThreadId}`);
+                if (resourceSheetName) {
+                  console.log(`Extracted Sheet Name: ${resourceSheetName}`);
+                }
+              } catch (extractError) {
+                console.warn(`Could not extract resource info: ${extractError instanceof Error ? extractError.message : String(extractError)}`);
+              }
+              
               const resourceResult = await client.request(
                 { 
                   method: "resources/read",
@@ -118,12 +207,28 @@ export async function runClientLogic(client: Client, threadId: string, sheetName
               );
               console.log('Received read_resource response');
               
-              // Debug the response structure
-              console.log('Resource result:', JSON.stringify(resourceResult, null, 2));
+              // Debug the response structure - truncate if too large
+              const resourceResultJson = JSON.stringify(resourceResult, null, 2);
+              if (resourceResultJson.length > MAX_DISPLAY_LENGTH) {
+                console.log(`Resource result (truncated to ${MAX_DISPLAY_LENGTH} characters):`,
+                  resourceResultJson.substring(0, MAX_DISPLAY_LENGTH));
+                console.log(`Original resource result length: ${resourceResultJson.length} characters`);
+              } else {
+                console.log('Resource result:', resourceResultJson);
+              }
               
               if (resourceResult && resourceResult.contents && Array.isArray(resourceResult.contents) && resourceResult.contents.length > 0) {
                 const resourceContent = resourceResult.contents[0];
-                console.log('Resource content:', JSON.stringify(resourceContent, null, 2));
+                
+                // Truncate resource content JSON if too large
+                const resourceContentJson = JSON.stringify(resourceContent, null, 2);
+                if (resourceContentJson.length > MAX_DISPLAY_LENGTH) {
+                  console.log(`Resource content (truncated to ${MAX_DISPLAY_LENGTH} characters):`,
+                    resourceContentJson.substring(0, MAX_DISPLAY_LENGTH));
+                  console.log(`Original resource content length: ${resourceContentJson.length} characters`);
+                } else {
+                  console.log('Resource content:', resourceContentJson);
+                }
                 
                 if (resourceContent.type === "text" && typeof resourceContent.text === 'string') {
                   console.log(`Complete CSV has ${resourceContent.text.split('\n').length} lines`);

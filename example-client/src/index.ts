@@ -4,7 +4,7 @@ import { runStdioClient } from './stdio-client.js';
 import { runHttpClient } from './http-client.js';
 
 // Load environment variables from .env.local
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local' ) });
 
 // Check required environment variables
 const required = ['QUIP_TOKEN', 'QUIP_BASE_URL', 'QUIP_THREAD_ID'];
@@ -61,7 +61,13 @@ async function main() {
     
     // Run the appropriate client based on the transport option
     if (options.transport === 'http') {
-      await runHttpClient(quipToken, quipBaseUrl, threadId, options.port, sheetName);
+      await runHttpClient(
+        quipToken, 
+        quipBaseUrl, 
+        threadId, 
+        options.port, 
+        sheetName,
+      );
     } else {
       await runStdioClient(quipToken, quipBaseUrl, threadId, sheetName);
     }
