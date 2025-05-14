@@ -1,0 +1,20 @@
+{
+  "name": "quip-mcp-server-lambda",
+  "version": "1.0.0",
+  "description": "Lambda handler for quip-mcp-server-typescript",
+  "main": "lambda-handler.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "aws",
+    "lambda",
+    "quip",
+    "mcp"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.806.0"
+  }
+}

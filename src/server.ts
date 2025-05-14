@@ -426,12 +426,12 @@ export async function main(): Promise<void> {
     const isStdinPipe = !process.stdin.isTTY;
     
     logger.info(`Stdin is pipe: ${isStdinPipe}, process.stdin.isTTY: ${process.stdin.isTTY}`);
-    logger.info(`Environment PORT: ${process.env.PORT}, options.port: ${options.port}`);
+    logger.info(`Environment MCP_PORT: ${process.env.MCP_PORT}, options.port: ${options.port}`);
     
     // Choose transport based on options
-    if (options.port || process.env.PORT) {
+    if (options.port || process.env.MCP_PORT) {
       // Using Streamable HTTP transport with Express
-      const port = options.port || parseInt(process.env.PORT || '3000', 10);
+      const port = options.port || parseInt(process.env.MCP_PORT || '3000', 10);
       logger.info(`Using HTTP transport on port ${port}`);
       
       // Create Express app
