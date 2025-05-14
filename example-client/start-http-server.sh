@@ -70,7 +70,7 @@ fi
 echo "Starting Quip MCP server in HTTP mode on port $PORT..."
 
 # Define base command
-CMD="QUIP_TOKEN=\"$QUIP_TOKEN\" QUIP_BASE_URL=\"$QUIP_BASE_URL\" PORT=$PORT"
+CMD="QUIP_TOKEN=\"$QUIP_TOKEN\" QUIP_BASE_URL=\"$QUIP_BASE_URL\" MCP_PORT=$PORT"
 
 # Add storage type
 CMD="$CMD STORAGE_TYPE=$STORAGE_TYPE"

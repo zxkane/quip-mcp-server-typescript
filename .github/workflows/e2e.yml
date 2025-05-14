@@ -63,7 +63,7 @@ jobs:
 
     - name: Start server for HTTP transport test
       env:
-        PORT: 3000
+        MCP_PORT: 3000
         QUIP_TOKEN: ${{ secrets.QUIP_TOKEN }}
         QUIP_BASE_URL: ${{ secrets.QUIP_BASE_URL }}
       run: |

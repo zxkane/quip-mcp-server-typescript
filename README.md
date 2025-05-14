@@ -14,6 +14,7 @@ A Model Context Protocol (MCP) server for interacting with Quip spreadsheets, im
   - [Transport Documentation](#transport-documentation)
   - [Configure for Claude.app](#configure-for-claudeapp)
   - [Command Line Arguments](#command-line-arguments)
+  - [Deploy to AWS Lambda + API Gateway](#deploy-to-aws-lambda--api-gateway)
 - [Available Tools](#available-tools)
   - [quip_read_spreadsheet](#quip_read_spreadsheet)
 - [Resource URIs](#resource-uris)
@@ -27,6 +28,8 @@ A Model Context Protocol (MCP) server for interacting with Quip spreadsheets, im
     - [Local Storage](#local-storage)
     - [S3 Storage](#s3-storage)
 - [Health Check Endpoint](#health-check-endpoint)
+- [Cloud Deployment](#cloud-deployment)
+  - [AWS Lambda + API Gateway](#aws-lambda--api-gateway)
 - [Development](#development)
   - [Project Structure](#project-structure)
   - [Setting Up a Development Environment](#setting-up-a-development-environment)
@@ -232,6 +235,18 @@ node dist/index.js --mock --storage-path /path/to/storage
 ```bash
 node dist/index.js --auth --api-key your_api_key_here
 ```
+
+### Deploy to AWS Lambda + API Gateway
+
+The Quip MCP server can be deployed to AWS Lambda with API Gateway to create a serverless, scalable HTTP endpoint. This setup is ideal for production environments and provides several benefits:
+
+- **Serverless Operation**: No need to manage servers
+- **Auto-scaling**: Handles varying loads automatically
+- **High Availability**: Distributed across multiple availability zones
+- **Cost-effective**: Pay only for what you use
+- **Streamable HTTP Interface**: Works with tools that support HTTP MCP servers
+
+For detailed deployment instructions, see the [Cloud Deployment](#aws-lambda--api-gateway) section.
 
 ## Available Tools
 
@@ -510,6 +525,33 @@ The endpoint returns a simple JSON response with status "ok" when the server is 
 
 This endpoint can be used by monitoring tools or container orchestration systems to check if the server is healthy and ready to handle requests.
 
+## Cloud Deployment
+
+### AWS Lambda + API Gateway
+
+The Quip MCP server can be deployed as a serverless application using AWS Lambda with API Gateway. This provides a scalable, low-maintenance deployment option with a streamable HTTP interface.
+
+The project includes an AWS CDK infrastructure setup that automates the deployment of:
+- Lambda function with the Quip MCP server
+- API Gateway endpoint
+- S3 bucket for storing CSV files
+- Secrets Manager for storing sensitive information
+
+For detailed deployment instructions, architecture overview, and usage information, see the [AWS Lambda Deployment Guide](infrastructure/README.md) in the infrastructure directory.
+
+To connect Claude.app to your deployed MCP server, add the following to your Claude settings (after deployment):
+
+```json
+"mcpServers": {
+  "quip-remote": {
+    "endpointUrl": "https://your-api-gateway-url/mcp",
+    "headers": {
+      "X-API-Key": "YOUR_API_KEY_VALUE"
+    }
+  }
+}
+```
+
 ## Development
 
 ### Project Structure
@@ -531,11 +573,33 @@ quip-mcp-server-typescript/
 │   ├── auth.ts                  # Authentication
 │   └── cache.ts                 # Caching mechanism
 ├── tests/
-│   ├── server.test.ts           # Unit tests for server
-│   ├── quipClient.test.ts       # Unit tests for Quip client
-│   ├── tools.test.ts            # Unit tests for tools
-│   ├── storage.test.ts          # Unit tests for storage
+│   ├── unit/                    # Unit tests
+│   │   ├── server.test.ts
+│   │   ├── quipClient.test.ts
+│   │   ├── tools.test.ts
+│   │   ├── storage.test.ts
+│   │   └── ...
 │   └── e2e/                     # End-to-end tests
+├── infrastructure/              # AWS deployment resources
+│   ├── cdk/                     # CDK project
+│   │   ├── bin/
+│   │   │   └── app.ts           # CDK app entry point
+│   │   ├── lib/
+│   │   │   └── quip-mcp-server-stack.ts  # Main CDK stack
+│   │   ├── lambda/              # Lambda function code
+│   │   │   ├── run.js           # Lambda handler
+│   │   │   └── package.json
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   └── README.md                # AWS deployment documentation
+├── example-client/              # Example MCP client implementation
+│   ├── src/
+│   │   ├── client-common.ts
+│   │   ├── http-client.ts
+│   │   ├── stdio-client.ts
+│   │   └── index.ts
+│   ├── package.json
+│   └── README.md
 ├── dist/                        # Compiled JavaScript output
 ├── .env.example                 # Example environment variables
 ├── .gitignore                   # Git ignore file
