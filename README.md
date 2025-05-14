@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/zxkane-quip-mcp-server-typescript-badge.png)](https://mseep.ai/app/zxkane-quip-mcp-server-typescript)
+
 # Quip MCP Server (TypeScript)
 
 A Model Context Protocol (MCP) server for interacting with Quip spreadsheets, implemented in TypeScript. This server provides tools to read spreadsheet data from Quip documents and return the content in CSV format.
