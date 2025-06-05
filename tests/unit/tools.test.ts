@@ -266,6 +266,39 @@ describe('Tools Implementation', () => {
       await expect(handleQuipReadSpreadsheet(validArgs, mockStorage, false)).rejects.toThrow('Thread mock-thread-id is not a spreadsheet or does not exist');
     });
     
+    it('should throw QuipApiError for non-spreadsheet threadId in mock mode', async () => {
+      // Mock MockQuipClient to return false for isSpreadsheet (non-spreadsheet case)
+      (MockQuipClient as jest.Mock).mockImplementation(() => ({
+        isSpreadsheet: jest.fn().mockResolvedValue(false)
+      }));
+      
+      // Remove the mock implementation
+      jest.spyOn(require('../../src/tools'), 'handleQuipReadSpreadsheet').mockRestore();
+      
+      const nonSpreadsheetArgs = {
+        threadId: 'not_a_spreadsheet_thread_id',
+        sheetName: 'SomeSheet'
+      };
+      
+      // This should throw a QuipApiError with specific message
+      await expect(handleQuipReadSpreadsheet(nonSpreadsheetArgs, mockStorage, true)).rejects.toThrow(QuipApiError);
+      await expect(handleQuipReadSpreadsheet(nonSpreadsheetArgs, mockStorage, true))
+        .rejects.toThrow('Thread not_a_spreadsheet_thread_id is not a spreadsheet or does not exist');
+      
+      // Verify that the error has the correct error code
+      try {
+        await handleQuipReadSpreadsheet(nonSpreadsheetArgs, mockStorage, true);
+        fail('Expected QuipApiError to be thrown');
+      } catch (error) {
+        if (error instanceof QuipApiError) {
+          expect(error.code).toBe(-32003); // QuipApiError code
+          expect(error.message).toBe('Thread not_a_spreadsheet_thread_id is not a spreadsheet or does not exist');
+        } else {
+          fail('Expected QuipApiError to be thrown');
+        }
+      }
+    });
+    
     it('should try fallback method if primary export fails', async () => {
       // Set up environment
       process.env.QUIP_TOKEN = 'mock-token';

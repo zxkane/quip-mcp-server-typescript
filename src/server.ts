@@ -30,7 +30,7 @@ import {
 
 // Import error handling
 import {
-  MethodNotFoundError,
+  QuipMCPError,
   ResourceNotFoundError} from './errors';
 
 // Import logger
@@ -378,17 +378,57 @@ export async function main(): Promise<void> {
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
       logger.info(`Handling tools/call request for tool: ${request.params.name}`);
       
-      if (request.params.name === "quip_read_spreadsheet") {
+      try {
+        if (request.params.name === "quip_read_spreadsheet") {
+          return {
+            content: await handleQuipReadSpreadsheet(
+              request.params.arguments || {},
+              storageInstance!,
+              options.mock
+            )
+          };
+        } else {
+          logger.error(`Unknown tool: ${request.params.name}`);
+          // Return error as content instead of throwing to ensure response is sent
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                error: {
+                  code: -32601,
+                  message: `Method not found: ${request.params.name}`
+                }
+              })
+            }]
+          };
+        }
+      } catch (error) {
+        // Log the error for debugging
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(`Error in tool call handler for ${request.params.name}: ${errorMessage}`);
+        
+        // Instead of throwing, return error as content to ensure response is sent
+        let errorCode = -32603; // Internal error default
+        let errorMsg = 'Internal server error';
+        
+        if (error instanceof QuipMCPError) {
+          errorCode = error.code;
+          errorMsg = error.message;
+        } else if (error instanceof Error) {
+          errorMsg = error.message;
+        }
+        
         return {
-          content: await handleQuipReadSpreadsheet(
-            request.params.arguments || {},
-            storageInstance!,
-            options.mock
-          )
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              error: {
+                code: errorCode,
+                message: errorMsg
+              }
+            })
+          }]
         };
-      } else {
-        logger.error(`Unknown tool: ${request.params.name}`);
-        throw new MethodNotFoundError(`Unknown tool: ${request.params.name}`);
       }
     });
     
@@ -442,6 +482,21 @@ export async function main(): Promise<void> {
       app.post('/mcp', async (req: Request, res: Response) => {
         logger.info('Received POST MCP request');
         
+        // Set request timeout to prevent hanging connections
+        const requestTimeout = setTimeout(() => {
+          if (!res.headersSent) {
+            logger.error('Request timeout - forcing response');
+            res.status(408).json({
+              jsonrpc: '2.0',
+              error: {
+                code: -32000,
+                message: 'Request timeout'
+              },
+              id: req.body?.id || null
+            });
+          }
+        }, 30000); // 30 second timeout
+        
         try {
           // Each request gets its own transport and server instance for stateless mode
           const transport = new StreamableHTTPServerTransport({
@@ -449,26 +504,56 @@ export async function main(): Promise<void> {
             enableJsonResponse: true
           });
           
-          // Clean up on request close
+          // Clean up on request close or completion
+          const cleanup = () => {
+            clearTimeout(requestTimeout);
+            transport.close();
+          };
+          
           res.on('close', () => {
             logger.info('Request closed');
-            transport.close();
+            cleanup();
+          });
+          
+          res.on('finish', () => {
+            logger.info('Request finished');
+            cleanup();
           });
           
           await server.connect(transport);
           await transport.handleRequest(req, res, req.body);
+          
+          // Clear timeout on successful completion
+          clearTimeout(requestTimeout);
+          
         } catch (error) {
+          // Clear timeout on error
+          clearTimeout(requestTimeout);
+          
           const errorMessage = error instanceof Error ? error.message : String(error);
           logger.error('Error handling MCP request:', { error: errorMessage });
           
           if (!res.headersSent) {
+            // Determine appropriate error code and message based on error type
+            let errorCode = -32603; // Internal error default
+            let errorMsg = 'Internal server error';
+            
+            // Handle specific error types
+            if (error instanceof Error) {
+              const err = error as any;
+              if (err.code && typeof err.code === 'number') {
+                errorCode = err.code;
+                errorMsg = error.message;
+              }
+            }
+            
             res.status(500).json({
               jsonrpc: '2.0',
               error: {
-                code: -32603,
-                message: 'Internal server error'
+                code: errorCode,
+                message: errorMsg
               },
-              id: null
+              id: req.body?.id || null
             });
           }
         }
