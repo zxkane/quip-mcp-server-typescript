@@ -539,7 +539,7 @@ The project includes an AWS CDK infrastructure setup that automates the deployme
 - S3 bucket for storing CSV files
 - Secrets Manager for storing sensitive information
 
-For detailed deployment instructions, architecture overview, and usage information, see the [AWS Lambda Deployment Guide](infrastructure/README.md) in the infrastructure directory.
+For detailed deployment instructions, architecture overview, and usage information, see the [AWS Lambda Deployment Guide](infrastructure/api-gateway-lambda/README.md) in the infrastructure directory.
 
 To connect Claude.app to your deployed MCP server, add the following to your Claude settings (after deployment):
 
@@ -583,7 +583,7 @@ quip-mcp-server-typescript/
 │   │   └── ...
 │   └── e2e/                     # End-to-end tests
 ├── infrastructure/              # AWS deployment resources
-│   ├── cdk/                     # CDK project
+│   ├── api-gateway-lambda/      # CDK project for Lambda + API Gateway deployment
 │   │   ├── bin/
 │   │   │   └── app.ts           # CDK app entry point
 │   │   ├── lib/
@@ -592,8 +592,9 @@ quip-mcp-server-typescript/
 │   │   │   ├── run.js           # Lambda handler
 │   │   │   └── package.json
 │   │   ├── package.json
-│   │   └── tsconfig.json
-│   └── README.md                # AWS deployment documentation
+│   │   ├── tsconfig.json
+│   │   └── README.md            # Lambda + API Gateway deployment guide
+│   └── README.md                # Overview of deployment options
 ├── example-client/              # Example MCP client implementation
 │   ├── src/
 │   │   ├── client-common.ts
