@@ -4,6 +4,35 @@
 
 A Model Context Protocol (MCP) server for interacting with Quip spreadsheets, implemented in TypeScript. This server provides tools to read spreadsheet data from Quip documents and return the content in CSV format.
 
+## 🚀 AWS Pay-as-You-Go Serverless Deployment
+
+**Deploy to AWS with zero infrastructure management and pay only for what you use!**
+
+### ⚡ AWS Agent Core Runtime (Recommended)
+- **🔧 SSE Support**: Built-in Server-Sent Events for real-time streaming
+- **⏱️ Extended Runtime**: Up to 8 hours execution time
+- **📦 Large Payloads**: 100MB payload support
+- **🔐 Built-in Auth**: Integrated OAuth and identity management
+- **💰 Consumption-based**: Pay only for actual runtime usage
+
+```bash
+cd infrastructure/agent-core
+./deploy.sh --agent-name my-quip-mcp --secret-arn arn:aws:secretsmanager:...
+```
+
+### 🌐 AWS Lambda + API Gateway
+- **📈 Auto-scaling**: Handles varying loads automatically
+- **🌍 Global**: Distributed across multiple availability zones
+- **💸 Cost-effective**: Pay per request with generous free tier
+- **🔌 HTTP Interface**: Works with any HTTP MCP client
+
+```bash
+cd infrastructure/api-gateway-lambda
+./deploy.sh --secret-arn arn:aws:secretsmanager:...
+```
+
+Both options provide enterprise-grade serverless infrastructure with no servers to manage!
+
 ## Table of Contents
 
 - [Features](#features)
@@ -16,6 +45,7 @@ A Model Context Protocol (MCP) server for interacting with Quip spreadsheets, im
   - [Transport Documentation](#transport-documentation)
   - [Configure for Claude.app](#configure-for-claudeapp)
   - [Command Line Arguments](#command-line-arguments)
+  - [Server-Sent Events (SSE) Support](#server-sent-events-sse-support)
   - [Deploy to AWS Lambda + API Gateway](#deploy-to-aws-lambda--api-gateway)
 - [Available Tools](#available-tools)
   - [quip_read_spreadsheet](#quip_read_spreadsheet)
@@ -32,6 +62,7 @@ A Model Context Protocol (MCP) server for interacting with Quip spreadsheets, im
 - [Health Check Endpoint](#health-check-endpoint)
 - [Cloud Deployment](#cloud-deployment)
   - [AWS Lambda + API Gateway](#aws-lambda--api-gateway)
+  - [AWS Agent Core Runtime](#aws-agent-core-runtime)
 - [Development](#development)
   - [Project Structure](#project-structure)
   - [Setting Up a Development Environment](#setting-up-a-development-environment)
@@ -222,6 +253,7 @@ The server supports the following command line arguments:
 - `--api-key <key>`: API key for authentication (auto-generated if not provided)
 - `--api-key-header <header>`: API key header name (defaults to X-API-Key)
 - `--port <port>`: HTTP port to listen on (defaults to MCP_PORT environment variable or 3000)
+- `--sse`: Enable SSE (Server-Sent Events) format for responses (defaults to false)
 
 **Example:**
 ```bash
@@ -237,6 +269,53 @@ node dist/index.js --mock --storage-path /path/to/storage
 ```bash
 node dist/index.js --auth --api-key your_api_key_here
 ```
+
+**Example with SSE format:**
+```bash
+node dist/index.js --port 3000 --sse --mock
+```
+
+### Server-Sent Events (SSE) Support
+
+The server supports Server-Sent Events (SSE) format for HTTP responses through the `--sse` flag. SSE is a web standard that allows servers to push data to clients over a single HTTP connection using the `text/event-stream` content type.
+
+**When to use SSE:**
+- Real-time applications that need streaming responses
+- Integration with systems that expect event-stream format
+- WebSocket alternatives for server-to-client communication
+- Progressive response streaming
+
+**Response Format Differences:**
+
+*With `--sse` flag:*
+```
+Content-Type: text/event-stream
+Cache-Control: no-cache
+Connection: keep-alive
+
+data: {"jsonrpc":"2.0","result":{"tools":[...]},"id":1}
+
+```
+
+*Without `--sse` flag (default):*
+```
+Content-Type: application/json
+
+{"jsonrpc":"2.0","result":{"tools":[...]},"id":1}
+```
+
+**Testing SSE functionality:**
+```bash
+# Start SSE server
+node dist/index.js --port 3000 --sse --mock &
+
+# Test with curl
+curl -H "Content-Type: application/json" \
+     -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' \
+     http://localhost:3000/mcp
+```
+
+All MCP protocol methods are supported with SSE format, including error responses. The underlying MCP functionality remains unchanged.
 
 ### Deploy to AWS Lambda + API Gateway
 
@@ -552,6 +631,44 @@ To connect Claude.app to your deployed MCP server, add the following to your Cla
     }
   }
 }
+```
+
+### AWS Agent Core Runtime
+
+The Quip MCP server can also be deployed to AWS Agent Core Runtime, which provides enhanced capabilities for AI agents and MCP servers:
+
+**Key Benefits:**
+- **Extended execution time**: Up to 8 hours (vs 15-minute Lambda limit)
+- **Larger payload support**: 100MB payloads (vs 6MB Lambda limit)
+- **Session isolation**: Dedicated microVMs for each user session
+- **Built-in authentication**: Integrated OAuth and identity management
+- **Enhanced observability**: Specialized tracing for agent operations
+- **Consumption-based pricing**: Pay only for actual runtime usage
+
+The project includes a complete CDK infrastructure setup for Agent Core Runtime deployment:
+
+- ARM64 container deployment with Docker buildx
+- ECR repository with automated image builds
+- IAM roles with AWS-documented permissions for Agent Core Runtime
+- AwsCustomResource for Agent Core Runtime API calls
+- S3 integration for data storage
+- Secrets Manager integration for credentials
+
+**Complete IAM Permission Set:**
+The deployment automatically creates an execution role with all required permissions per AWS documentation:
+- ECR image access and authentication
+- CloudWatch Logs for runtime logging
+- X-Ray distributed tracing
+- CloudWatch metrics publishing
+- Agent Core Runtime workload identity
+- Bedrock model invocation capabilities
+
+For detailed deployment instructions, see the [Agent Core Runtime Deployment Guide](infrastructure/agent-core/README.md).
+
+Quick deployment:
+```bash
+cd infrastructure/agent-core
+./deploy.sh --agent-name my-quip-mcp --region us-west-2
 ```
 
 ## Development

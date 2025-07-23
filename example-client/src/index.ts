@@ -20,6 +20,7 @@ const quipToken = process.env.QUIP_TOKEN || '';
 const quipBaseUrl = process.env.QUIP_BASE_URL || '';
 const threadId = process.env.QUIP_THREAD_ID || '';
 const sheetName = process.env.QUIP_SHEET_NAME;
+const sseMode = process.env.MCP_SSE_ENABLED === 'true';
 
 // Parse command line arguments
 function parseArgs() {
@@ -67,6 +68,7 @@ async function main() {
         threadId, 
         options.port, 
         sheetName,
+        sseMode
       );
     } else {
       await runStdioClient(quipToken, quipBaseUrl, threadId, sheetName);

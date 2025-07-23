@@ -7,6 +7,9 @@
 #   ./start-http-server.sh 3000 local    # Use local storage with port 3000
 #   ./start-http-server.sh 3000 s3       # Use S3 storage with port 3000
 #   ./start-http-server.sh               # Use default port 3000 with local storage
+#
+# SSE Support:
+#   Set MCP_SSE_ENABLED=true in your .env file to enable Server-Sent Events format
 
 # Default port if not specified
 PORT=${1:-3000}
@@ -75,6 +78,14 @@ CMD="QUIP_TOKEN=\"$QUIP_TOKEN\" QUIP_BASE_URL=\"$QUIP_BASE_URL\" MCP_PORT=$PORT"
 # Add storage type
 CMD="$CMD STORAGE_TYPE=$STORAGE_TYPE"
 
+# Add SSE flag if enabled
+if [ "$MCP_SSE_ENABLED" == "true" ]; then
+    echo "SSE (Server-Sent Events) format enabled"
+    SSE_FLAG="--sse"
+else
+    SSE_FLAG=""
+fi
+
 # Add S3 specific environment variables if using S3 storage
 if [ "$STORAGE_TYPE" == "s3" ]; then
     echo "Using S3 storage with bucket: $S3_BUCKET, region: $S3_REGION"
@@ -118,7 +129,7 @@ log_cmd=$(echo "$CMD" | sed -E 's/(QUIP_TOKEN=")[^"]*(")/ QUIP_TOKEN="********" 
     sed -E 's/(AWS_ACCESS_KEY_ID=")[^"]*(")/ AWS_ACCESS_KEY_ID="********" /g' | \
     sed -E 's/(AWS_SECRET_ACCESS_KEY=")[^"]*(")/ AWS_SECRET_ACCESS_KEY="********" /g')
 
-echo "Starting server with command: $log_cmd node $SERVER_CMD"
-eval "$CMD node $SERVER_CMD --debug"
+echo "Starting server with command: $log_cmd node $SERVER_CMD $SSE_FLAG"
+eval "$CMD node $SERVER_CMD --debug $SSE_FLAG"
 
 # Note: This script will block until the server is stopped with Ctrl+C

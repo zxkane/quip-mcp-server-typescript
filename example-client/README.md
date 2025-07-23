@@ -19,6 +19,7 @@ This directory contains example clients for the Quip MCP Server, demonstrating h
    - `QUIP_BASE_URL`: Quip API base URL (defaults to https://platform.quip.com/1)
    - `QUIP_THREAD_ID`: ID of the Quip thread containing the spreadsheet
    - `QUIP_SHEET_NAME`: (Optional) Name of the specific sheet if multiple exist
+   - `MCP_SSE_ENABLED`: (Optional) Set to 'true' to enable Server-Sent Events format for responses
 
 ## Storage Options
 
@@ -52,6 +53,7 @@ To use Amazon S3 for storage:
    S3_PREFIX=your-prefix/
    S3_URL_EXPIRATION=3600
    USE_PRESIGNED_URLS=true
+   MCP_SSE_ENABLED=false
    ```
 
 3. Configure AWS credentials using one of the following methods:
@@ -108,6 +110,14 @@ npm run start:stdio
 ### HTTP Transport
 
 This transport method connects to the server over HTTP. This requires you to separately start the server in HTTP mode by setting the PORT environment variable.
+
+#### Server-Sent Events (SSE) Support
+
+The HTTP transport supports Server-Sent Events format for responses. When enabled, the server will return responses in SSE format using the `text/event-stream` content type instead of regular JSON responses.
+
+To enable SSE format:
+- Set the `MCP_SSE_ENABLED` environment variable to `'true'` in your `.env.local` file
+- The client will automatically detect this setting and configure the appropriate headers and server command
 
 #### Using the Helper Script (Recommended)
 
@@ -193,6 +203,7 @@ The available server flags include:
 - `--file-protocol`: Uses file-based protocol for interaction
 - `--mock`: Runs in mock mode with simulated data
 - `--storage-type`: Specifies the storage type ('local' or 's3')
+- `--sse`: Enables Server-Sent Events format for HTTP responses
 
 ## Troubleshooting
 
@@ -208,7 +219,7 @@ If you encounter issues with the STDIO transport:
 
 If you encounter issues with the HTTP transport:
 
-1. Make sure you have started the server with `PORT=<port> node dist/index.js --debug`
+1. Make sure you have started the server with `PORT=<port> node dist/index.js --debug` (add `--sse` flag if using SSE mode)
 2. Check that the port numbers match between server and client
 3. Make sure there are no firewall or networking issues blocking the connection
 4. Try increasing the timeout if you have slow connections

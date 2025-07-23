@@ -64,6 +64,7 @@ export class QuipMcpServerStack extends cdk.Stack {
         MCP_PORT: '8080',
         MCP_AUTH_ENABLED: 'true',
         MCP_API_KEY_HEADER: 'X-API-Key',
+        MCP_SSE_ENABLED: 'false',  // Can be set to 'true' to enable SSE format
         SECRET_ARN: quipSecret.secretArn,
       },
     });

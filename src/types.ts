@@ -80,6 +80,11 @@ export interface CommandLineOptions {
    * HTTP port to listen on
    */
   port?: number;
+  
+  /**
+   * Whether to enable SSE (Server-Sent Events) format for responses
+   */
+  sse: boolean;
 }
 
 /**
