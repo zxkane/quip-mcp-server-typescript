@@ -87,6 +87,11 @@ export function parseCommandLineArgs(): CommandLineOptions {
       '--port <port>',
       'HTTP port to listen on (default: from MCP_PORT env var or 3000)',
       (value) => parseInt(value, 10)
+    )
+    .option(
+      '--sse',
+      'Enable SSE (Server-Sent Events) format for responses',
+      false
     );
   
   program.parse();

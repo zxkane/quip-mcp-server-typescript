@@ -21,6 +21,7 @@ export async function runHttpClient(
   threadId: string,
   port: number = 3000,
   sheetName?: string,
+  sseMode: boolean = false,
 ): Promise<void> {
   try {
     // Initialize the client
@@ -37,26 +38,34 @@ export async function runHttpClient(
     console.log(`Starting standalone server on port ${port} and connecting via HTTP...`);
     console.log(`Note: You need to manually start the server with the following command in a separate terminal:`);
     
-    // Build example command
-    const exampleCmd = `QUIP_TOKEN='<your token>' QUIP_BASE_URL='<your url>' PORT=${port}`;
+    // Build example command with SSE support
+    const sseFlag = sseMode ? ' --sse' : '';
+    const exampleCmd = `QUIP_TOKEN='<your token>' QUIP_BASE_URL='<your url>' PORT=${port} node dist/index.js${sseFlag}`;
     
     console.log(exampleCmd);
     
     // Configure HTTP transport to connect to the correct endpoint
     const url = new URL(`http://localhost:${port}/mcp`);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    // Add Accept header for SSE mode
+    if (sseMode) {
+      headers['Accept'] = 'text/event-stream';
+      console.log('SSE mode enabled - expecting Server-Sent Events format');
+    }
+    
     const transport = new StreamableHTTPClientTransport(url, {
       requestInit: {
-        headers: {
-          'Content-Type': 'application/json',
-        }
+        headers
       }
     });
     
     console.log("Transport configuration:", {
       url: url.toString(),
-      headers: {
-        'Content-Type': 'application/json',
-      }
+      headers,
+      sseMode
     });
     
     try {
@@ -72,8 +81,8 @@ export async function runHttpClient(
       console.error("3. Verify that the server started successfully (check for error messages)");
       console.error("4. Try a different port if necessary");
       console.error("\nFull command to start the server:");
-      // Define base command
-      const serverCommand = `QUIP_TOKEN='${quipToken}' QUIP_BASE_URL='${quipBaseUrl}' PORT=${port} node dist/index.js --debug`;
+      // Define base command with SSE support
+      const serverCommand = `QUIP_TOKEN='${quipToken}' QUIP_BASE_URL='${quipBaseUrl}' PORT=${port} node dist/index.js --debug${sseFlag}`;
       
       console.error(serverCommand + '\n');
       throw error;

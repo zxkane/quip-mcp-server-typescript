@@ -1,0 +1,80 @@
+# Multi-stage Dockerfile for ARM64 MCP Server deployment to Agent Core Runtime
+
+# Build stage - ensure ARM64 architecture
+FROM public.ecr.aws/docker/library/node:22-alpine AS builder
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including dev dependencies for building, skip scripts)
+RUN npm ci --ignore-scripts
+
+# Copy source code
+COPY src/ ./src/
+COPY tsconfig.json ./
+
+# Build the TypeScript code
+RUN npm run build
+
+# Production stage - ensure ARM64 target platform
+FROM public.ecr.aws/docker/library/node:22-alpine AS production
+
+# Verify we're running on ARM64 architecture (required for Agent Core Runtime)
+RUN echo "Architecture verification:" && uname -m && \
+    [ "$(uname -m)" = "aarch64" ] || (echo "ERROR: Not ARM64 architecture!" && exit 1)
+
+# Install dumb-init for proper process handling
+RUN apk add --no-cache dumb-init
+
+# Create app user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install only production dependencies (skip scripts to avoid prepare hook)
+RUN npm ci --only=production --ignore-scripts && npm cache clean --force
+
+# Copy built application from builder stage
+COPY --from=builder /app/dist ./dist
+
+# Copy run.js from api-gateway-lambda infrastructure for proper secret handling
+COPY infrastructure/api-gateway-lambda/lambda/run.js ./run.js
+
+# Fix the path in run.js to point to the correct built application location
+RUN sed -i "s|'index.js'|'dist/index.js'|g" ./run.js
+
+# Change ownership to app user
+RUN chown -R nextjs:nodejs /app
+USER nextjs
+
+# Expose port 8000 for MCP protocol
+EXPOSE 8000
+
+# Set environment variables for MCP Agent Core Runtime
+ENV NODE_ENV=production
+ENV MCP_PORT=8000
+
+# Health check for container
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD node -e "const http = require('http'); \
+    const options = { hostname: 'localhost', port: 8000, path: '/mcp', method: 'POST', \
+    headers: {'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream'}, timeout: 3000 }; \
+    const req = http.request(options, (res) => process.exit(res.statusCode === 200 ? 0 : 1)); \
+    req.on('error', () => process.exit(1)); \
+    req.on('timeout', () => process.exit(1)); \
+    req.write('{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}'); \
+    req.end();"
+
+# Use dumb-init to properly handle signals
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start the MCP server using run.js for proper secret handling
+CMD ["node", "run.js"]

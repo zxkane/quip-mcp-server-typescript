@@ -43,3 +43,8 @@ temp/
 # Storage directory (default location for CSV files)
 storage/
 .aider*
+
+# CDK
+cdk.out/
+infrastructure/**/*.d.ts
+infrastructure/**/*.js

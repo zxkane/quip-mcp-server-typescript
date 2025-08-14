@@ -42,6 +42,75 @@ import { parseCommandLineArgs, configureLogging, getStoragePath, getStorageConfi
 import { version } from './version';
 import { createStorage } from './storage';
 
+/**
+ * Format response data as SSE (Server-Sent Events) payload
+ * @param data Response data to format
+ * @returns SSE formatted string
+ */
+function formatSSE(data: any): string {
+  const jsonData = JSON.stringify(data);
+  return `data: ${jsonData}\n\n`;
+}
+
+/**
+ * Determine response format based on Accept header and SSE support
+ * @param req Express request object
+ * @param sseEnabled Whether SSE is enabled in options
+ * @returns Whether to use SSE format
+ */
+function shouldUseSSE(req: Request, sseEnabled: boolean): boolean {
+  if (!sseEnabled) {
+    // If SSE is disabled in options, never use SSE
+    return false;
+  }
+  
+  const acceptHeader = req.get('Accept') || '';
+  logger.debug(`Accept header: ${acceptHeader}`);
+  
+  // Check if client specifically requests SSE
+  const supportsSSE = acceptHeader.includes('text/event-stream');
+  const supportsJSON = acceptHeader.includes('application/json') || acceptHeader.includes('*/*');
+  
+  // If client supports both, prefer SSE when enabled
+  // If client only supports JSON, use JSON even if SSE is enabled
+  if (supportsSSE) {
+    return true;
+  } else if (supportsJSON) {
+    return false;
+  }
+  
+  // Default behavior when no specific Accept header
+  return sseEnabled;
+}
+
+/**
+ * Send SSE response
+ * @param res Express response object
+ * @param data Response data
+ */
+function sendSSEResponse(res: Response, data: any): void {
+  // Check if response is still writable and headers haven't been sent
+  if (res.headersSent || res.writableEnded || res.destroyed) {
+    logger.debug('Response already sent or connection closed, skipping SSE response');
+    return;
+  }
+  
+  try {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+    
+    res.write(formatSSE(data));
+    res.end();
+  } catch (error) {
+    logger.error('Error sending SSE response:', { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 // Load environment variables
 dotenv.config();
 
@@ -481,27 +550,38 @@ export async function main(): Promise<void> {
       // Handle POST requests for client-to-server communication
       app.post('/mcp', async (req: Request, res: Response) => {
         logger.info('Received POST MCP request');
+        logger.debug('Request body:', req.body);
         
         // Set request timeout to prevent hanging connections
         const requestTimeout = setTimeout(() => {
           if (!res.headersSent) {
             logger.error('Request timeout - forcing response');
-            res.status(408).json({
+            const timeoutResponse = {
               jsonrpc: '2.0',
               error: {
                 code: -32000,
                 message: 'Request timeout'
               },
               id: req.body?.id || null
-            });
+            };
+            
+            const useSSE = shouldUseSSE(req, options.sse);
+            if (useSSE) {
+              logger.debug('Response status code: 200 (SSE timeout)');
+              sendSSEResponse(res, timeoutResponse);
+            } else {
+              logger.debug('Response status code: 408 (timeout)');
+              res.status(408).json(timeoutResponse);
+            }
           }
         }, 30000); // 30 second timeout
         
         try {
           // Each request gets its own transport and server instance for stateless mode
+          const useSSE = shouldUseSSE(req, options.sse);
           const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: undefined,  // No sessions in stateless mode
-            enableJsonResponse: true
+            enableJsonResponse: !useSSE  // Disable JSON response for SSE mode
           });
           
           // Clean up on request close or completion
@@ -511,20 +591,27 @@ export async function main(): Promise<void> {
           };
           
           res.on('close', () => {
-            logger.info('Request closed');
+            logger.debug(`Request closed with final response status code: ${res.statusCode}`);
             cleanup();
           });
           
           res.on('finish', () => {
-            logger.info('Request finished');
+            logger.debug(`Request finished with final response status code: ${res.statusCode}`);
             cleanup();
           });
           
           await server.connect(transport);
+          
+          // Let the transport handle the request normally
+          logger.debug('Processing request with transport, SSE mode:', { sse: useSSE });
+          
           await transport.handleRequest(req, res, req.body);
           
           // Clear timeout on successful completion
           clearTimeout(requestTimeout);
+          
+          // Log actual response status code from transport
+          logger.debug(`Response status code: ${res.statusCode} (from transport)`);
           
         } catch (error) {
           // Clear timeout on error
@@ -547,14 +634,23 @@ export async function main(): Promise<void> {
               }
             }
             
-            res.status(500).json({
+            const errorResponse = {
               jsonrpc: '2.0',
               error: {
                 code: errorCode,
                 message: errorMsg
               },
               id: req.body?.id || null
-            });
+            };
+            
+            const useSSE = shouldUseSSE(req, options.sse);
+            if (useSSE) {
+              logger.debug('Response status code: 200 (SSE error)');
+              sendSSEResponse(res, errorResponse);
+            } else {
+              logger.debug('Response status code: 500 (error)');
+              res.status(500).json(errorResponse);
+            }
           }
         }
       });
@@ -562,26 +658,44 @@ export async function main(): Promise<void> {
       // Stateless mode doesn't support GET (server-sent events) or DELETE (session termination)
       app.get('/mcp', async (req: Request, res: Response) => {
         logger.info('Received GET MCP request');
-        res.status(405).json({
+        const errorResponse = {
           jsonrpc: '2.0',
           error: {
             code: -32000,
             message: 'Method not allowed in stateless mode.'
           },
           id: null
-        });
+        };
+        
+        const useSSE = shouldUseSSE(req, options.sse);
+        if (useSSE) {
+          logger.debug('Response status code: 200 (SSE method not allowed)');
+          sendSSEResponse(res, errorResponse);
+        } else {
+          logger.debug('Response status code: 405 (method not allowed)');
+          res.status(405).json(errorResponse);
+        }
       });
       
       app.delete('/mcp', async (req: Request, res: Response) => {
         logger.info('Received DELETE MCP request');
-        res.status(405).json({
+        const errorResponse = {
           jsonrpc: '2.0',
           error: {
             code: -32000,
             message: 'Method not allowed in stateless mode.'
           },
           id: null
-        });
+        };
+        
+        const useSSE = shouldUseSSE(req, options.sse);
+        if (useSSE) {
+          logger.debug('Response status code: 200 (SSE method not allowed)');
+          sendSSEResponse(res, errorResponse);
+        } else {
+          logger.debug('Response status code: 405 (method not allowed)');
+          res.status(405).json(errorResponse);
+        }
       });
       
       // Start HTTP server
