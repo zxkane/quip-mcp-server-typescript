@@ -44,7 +44,7 @@ export class QuipMcpServerStack extends cdk.Stack {
               'cp -r dist/* /asset-output/',
               'cp -r node_modules /asset-output/',
               'cp package.json /asset-output/',
-              'cp infrastructure/cdk/lambda/run.js /asset-output/',
+              'cp infrastructure/api-gateway-lambda/lambda/run.js /asset-output/',
             ].join(' && ')
           ],
           platform: '--linux/arm64',
