@@ -163,17 +163,13 @@ The deployed MCP server uses AWS IAM authentication. You'll need to:
 
 ```bash
 # Get agent runtime status
-aws bedrock-agent-core-control describe-agent-runtime \
-  --agent-runtime-arn "arn:aws:bedrock-agent-core:us-west-2:123456789012:runtime/quip_mcp_server_xyz123" \
-  --region us-west-2
+aws bedrock-agentcore-control get-agent-runtime --agent-runtime-id "your-agent-runtime-id(you can find it from stack outputs)"
 
 # Test MCP endpoint (requires proper IAM permissions)
-aws bedrock-agent-runtime invoke-agent \
-  --agent-id "your-agent-id" \
-  --agent-alias-id "your-alias-id" \
-  --session-id "test-session" \
-  --input-text "list available tools" \
-  --region us-west-2
+aws bedrock-agentcore invoke-agent-runtime \
+--agent-runtime-arn "your-agent-runtime-arn(you can find it from stack outputs)" \
+--payload `echo '{"jsonrpc":"2.0","id":123456,"method":"tools/list","params":{}}'|base64|tr -d '\n'` \
+--content 'application/json' --accept 'application/json, text/event-stream' outfile
 ```
 
 ### Using MCP Inspector with AWS Authentication
